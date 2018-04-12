@@ -4,6 +4,7 @@ import pickle
 
 
 
+# class which holds a generic information from a website feed.
 class WebFeed:
     def __init__(self):
         self.identifier = None
@@ -22,7 +23,7 @@ class WebFeed:
 
 
 
-
+# stores a hyperlink, and generic data about it
 class Link:
     def __init__(self):
         self.href = None
@@ -32,17 +33,19 @@ class Link:
         self.title = None
         self.length = None
 
+# appends a Link object 'entry' to array of links 'to'.
 def Link_Append(to, entry):
     
     new_link = Link()
 
     for child in entry.attrib:
-        setattr(new_link, child, child)
+        setattr(new_link, child.key, child.value)
+
+    to.append(new_link)
 
 
 
-
-
+# generic representation of an article in a feed.
 class Article:
     def __init__(self):
         self.identifier = None
@@ -58,11 +61,13 @@ class Article:
         self.rights = None
         self.source = None
 
-# in WebFeed 'to', append a new Article object corresponding to the xml representation 'entry' to articles.
+# Append an Article object corresponding to entry to list of Articles to.
 def Article_Append(to, entry):
     new_article = Article()
 
     for piece in entry:
+
+        # 
         tag = piece.tag.split('}', 1)[1]
         Mapping_Substitute (new_article, piece, atom_article_mapping, tag)
     
@@ -70,7 +75,7 @@ def Article_Append(to, entry):
 
 
 
-
+# generic representation of a person, ie author, contributor.
 class Person:
     def __init__(self):
         self.name = None
@@ -88,13 +93,13 @@ def Person_Append(to, person, index):
 
 
 
-
+# generic representation of text content.
 class Text:
     def __init__(self):
         self.text = None
         self.encoding = None
 
-# populate 'to' using 'text'
+# populate the attribute 'index' in 'to' with a Text object 'text'.
 def Text_Insert(to, text, index):
 
     new_text = Text()
@@ -106,13 +111,14 @@ def Text_Insert(to, text, index):
 
 
 
-
+# generic representation of a category.
 class Category:
     def __init__(self):
         self.term = None
         self.scheme = None
         self.label = None
 
+# append a Category 'category' to list of Category 'to'.
 def Category_Append(to, category):
     
     for key,val in category.attrib.items():
@@ -120,13 +126,14 @@ def Category_Append(to, category):
 
 
 
-
+# generic representation of content.
 class Content:
     def __init__(self):
         self.body = None
         self.content_type = None
         self.source = None
 
+# populate attribute 'index' in 'to' with a Content 'content'.
 def Content_Insert(to, content, index):
 
     new_content = Content()
@@ -253,6 +260,3 @@ Atom_Insert(feed_web_data, feed_object)
 
 feed_disk_data = None
 feed_array = []
-
-
-
