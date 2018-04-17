@@ -255,3 +255,44 @@ Atom_Insert(feed_web_data, feed_object)
 
 feed_disk_data = None
 feed_array = []
+
+
+create_tables(connection):
+    c = connection.cursor()
+    
+    c.execute('''CREATE TABLE feeds (
+        title TEXT,
+        updated INTEGER,
+        author TEXT,
+        icon TEXT,
+        link TEXT,
+        logo TEXT,
+        rights TEXT,
+        subtitle TEXT,
+        feed_type TEXT)''')
+    
+    c.execute('''CREATE TABLE authors (
+        feed_id INTEGER,
+        name TEXT,
+        uri TEXT,
+        email TEXT)''')
+    
+    c.execute('''CREATE TABLE articles (
+        title TEXT,
+        updated INTEGER,
+        author TEXT,
+        content TEXT,
+        link TEXT,
+        summary TEXT,
+        contributor TEXT,
+        published INTEGER,
+        rights TEXT,
+        source TEXT)''')
+    
+    c.execute('''CREATE TABLE article_authors(
+        feed_id INTEGER,
+        name TEXT,
+        uri TEXT,
+        email TEXT)''')
+    
+    connection.commit()
