@@ -149,7 +149,7 @@ def Content_Insert(to, content, index):
 
 
 
-feed_mapping : {
+feed_mapping = {
     "atom" : "atom_mapping"
 }
 
@@ -242,22 +242,7 @@ def load_rss_from_disk():
 
 
 
-# create WebFeed object
-
-feed_db = sqlite3.connect('feeds.db')
-
-
-feed_object = WebFeed()
-
-feed_web_data = download_rss_file()
-Atom_Insert(feed_web_data, feed_object)
-
-
-feed_disk_data = None
-feed_array = []
-
-
-create_tables(connection):
+def create_tables(connection):
     c = connection.cursor()
     
     c.execute('''CREATE TABLE feeds (
