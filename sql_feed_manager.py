@@ -1,5 +1,4 @@
 import sqlite3
-
 import requests
 import xml.etree.ElementTree as ET
 
@@ -35,7 +34,7 @@ class Link:
         self.length = None
 
 # appends a Link object 'entry' to array of links 'to'.
-def Link_Append(to, entry):
+def link_append(to, entry):
     
     new_link = Link()
 
@@ -63,14 +62,14 @@ class Article:
         self.source = None
 
 # Append an Article object corresponding to entry to list of Articles to.
-def Article_Append(to, entry):
+def article_append(to, entry):
     new_article = Article()
 
     for piece in entry:
 
         # 
         tag = piece.tag.split('}', 1)[1]
-        Mapping_Substitute (new_article, piece, atom_article_mapping, tag)
+        mapping_substitute (new_article, piece, atom_article_mapping, tag)
     
     to.articles.append(entry)
 
@@ -84,7 +83,7 @@ class Person:
         self.email = None
 
 # append into the list 'to', a new Person object corresponding to the xml representation 'person'.
-def Person_Append(to, person, index):
+def person_append(to, person, index):
     new_person = Person()
 
     for child in person:
@@ -101,7 +100,7 @@ class Text:
         self.encoding = None
 
 # populate the attribute 'index' in 'to' with a Text object 'text'.
-def Text_Insert(to, text, index):
+def text_insert(to, text, index):
 
     new_text = Text()
 
@@ -120,10 +119,10 @@ class Category:
         self.label = None
 
 # append a Category 'category' to list of Category 'to'.
-def Category_Append(to, category):
+def category_append(to, category):
     
     for key,val in category.attrib.items():
-        Mapping_Substitute(to, val, atom_category_map, key)
+        mapping_substitute(to, val, atom_category_map, key)
 
 
 
@@ -135,12 +134,12 @@ class Content:
         self.source = None
 
 # populate attribute 'index' in 'to' with a Content 'content'.
-def Content_Insert(to, content, index):
+def content_insert(to, content, index):
 
     new_content = Content()
 
     for attr in content.attrib:
-        Mapping_Substitute(new_content, attr.val, atom_content_map, attr.key)
+        mapping_substitute(new_content, attr.val, atom_content_map, attr.key)
 
     new_content.body = content.text
 
@@ -157,7 +156,7 @@ atom_mapping = {
     "id" : "identifier",
     "title" : "title",
     "updated" : "updated",
-    "author" : lambda to, piece: Person_Append(to, piece, "authors"),
+    "author" : lambda to, piece: person_append(to, piece, "authors"),
     "link" : "links",
     "category" : "categories",
     "contributor" : "contributor",
@@ -165,14 +164,14 @@ atom_mapping = {
     "logo" : "logo",
     "rights" : "rights",
     "subtitle" : "subtitle",
-    "entry" : Article_Append,
+    "entry" : article_append,
 }
 
 atom_article_mapping = {
     "id" : "identifier",
     "title" : "title",
     "updated" : "updated",
-    "author" : lambda to, piece: Person_Append(to, piece, "authors"),
+    "author" : lambda to, piece: person_append(to, piece, "authors"),
     "content" : "content",
     "link" : "link",
     "summary" : "summary",
@@ -181,7 +180,7 @@ atom_article_mapping = {
     "published" : "published",
     "rights" : "rights",
     "source" : "source",
-    "entry" : Article_Append,
+    "entry" : article_append,
 }
 
 atom_category_map={
@@ -202,7 +201,7 @@ atom_content_map = {
 }
 
 # substitute the 'map_entry' attribute in object 'to', with 'piece' using the mapping 'mapping'
-def Mapping_Substitute(to, piece, mapping, map_entry):
+def mapping_substitute(to, piece, mapping, map_entry):
 
     if (callable(mapping[map_entry])):
         mapping[map_entry](to, piece)
@@ -219,7 +218,7 @@ def Atom_Insert(parsed_xml, feed):
     for piece in parsed_xml:
         tag = piece.tag.split('}', 1)[1]
 
-        Mapping_Substitute(feed, piece, atom_mapping, tag)
+        mapping_substitute(feed, piece, atom_mapping, tag)
 
 
 
@@ -229,16 +228,7 @@ class Settings():
 
 
 
-def download_rss_file():
-    text_file = open("Output.xml", "w", encoding="utf-8")
-    rss_request = requests.get("http://reddit.com/.rss")
-    text_file.write(rss_request.text)
-    return text_file
 
-def load_rss_from_disk():
-    with open("Output.xml", "rb") as text_file:
-        rss = text_file.read().decode("utf-8")
-        return rss
 
 
 
