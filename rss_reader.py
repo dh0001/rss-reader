@@ -1,10 +1,11 @@
 # packages
-
-# own modules
-import sql_feed_manager
-import view
 import sqlite3
 import requests
+
+# own modules
+import sql_feed_manager as feeds
+import view
+import settings
 
 
 
@@ -14,17 +15,24 @@ def download_rss_file():
     text_file.write(rss_request.text)
     return text_file
 
-def load_rss_from_disk():
-    with open("Output.xml", "rb") as text_file:
-        rss = text_file.read().decode("utf-8")
+def load_rss_from_disk(f):
+    with open(f, "rb") as file:
+        rss = file.read().decode("utf-8")
         return rss
+
+
+settings.init()
 
 db = sqlite3.connect(':memory:')
 
-sql_feed_manager.create_tables(db)
+feeds.create_tables(db)
+feeds.()
 
-download_rss_file()
-rss = load_rss_from_disk()
+# download_rss_file()
+rss = load_rss_from_disk("Output.xml")
+
+
+
 
 db.close()
 
