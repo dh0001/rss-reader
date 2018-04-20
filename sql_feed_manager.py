@@ -3,7 +3,6 @@ import requests
 import xml.etree.ElementTree as ET
 
 
-
 # class which holds a generic information from a website feed.
 class WebFeed:
     def __init__(self):
@@ -32,6 +31,43 @@ class Article:
         self.category = []
         self.published = None
 
+
+feed_mapping = {
+    "atom" : "atom_mapping"
+}
+
+atom_mapping = {
+    "id" : "uri",
+    "title" : "title",
+    "updated" : "updated",
+    "author" : "author",
+    "link" : None,
+    "category" : "category",
+    "contributor" : None,
+    "icon" : "icon",
+    "logo" : None,
+    "rights" : None,
+    "subtitle" : "subtitle",
+    "entry" : article_append,
+}
+
+atom_article_mapping = {
+    "id" : "identifier",
+    "title" : "title",
+    "updated" : "updated",
+    "author" : "author",
+    "content" : "content",
+    "link" : "link",
+    "summary" : "summary",
+    "category" : "categories",
+    "contributor" : "contributor",
+    "published" : "published",
+    "rights" : "rights",
+    "source" : "source",
+    "entry" : article_append,
+}
+
+
 # Append an Article object corresponding to entry to list of Articles to.
 def article_append(to, entry):
     new_article = Article()
@@ -45,77 +81,17 @@ def article_append(to, entry):
     to.articles.append(entry)
 
 
+def download_rss_file():
+    text_file = open("Output.xml", "w", encoding="utf-8")
+    rss_request = requests.get("http://reddit.com/.rss")
+    text_file.write(rss_request.text)
+    return text_file
 
-# generic representation of a person, ie author, contributor.
-class Person:
-    def __init__(self):
-        self.name = None
-        self.uri = None
-        self.email = None
+def load_rss_from_disk(f):
+    with open(f, "rb") as file:
+        rss = file.read().decode("utf-8")
+        return rss
 
-# append into the list 'to', a new Person object corresponding to the xml representation 'person'.
-def person_append(to, person, index):
-    new_person = Person()
-
-    for child in person:
-        setattr(new_person, child.tag, child.text)
-
-    getattr(to, index).append(new_person)
-
-
-
-
-feed_mapping = {
-    "atom" : "atom_mapping"
-}
-
-atom_mapping = {
-    "id" : "uri",
-    "title" : "title",
-    "updated" : "updated",
-    "author" : lambda to, piece: person_append(to, piece, "authors"),
-    "link" : "links",
-    "category" : "categories",
-    "contributor" : "contributor",
-    "icon" : "icon",
-    "logo" : "logo",
-    "rights" : "rights",
-    "subtitle" : "subtitle",
-    "entry" : article_append,
-}
-
-atom_article_mapping = {
-    "id" : "identifier",
-    "title" : "title",
-    "updated" : "updated",
-    "author" : lambda to, piece: person_append(to, piece, "authors"),
-    "content" : "content",
-    "link" : "link",
-    "summary" : "summary",
-    "category" : "categories",
-    "contributor" : "contributor",
-    "published" : "published",
-    "rights" : "rights",
-    "source" : "source",
-    "entry" : article_append,
-}
-
-atom_category_map={
-    "term" : "term",
-    "scheme" : "scheme",
-    "label" : "label",
-}
-
-atom_person_map = {
-    "name" : "name",
-    "uri" :  "uri",
-    "email" : "email",
-}
-
-atom_content_map = {
-    "src" : "source",
-    "type" : "content_type",
-}
 
 # substitute the 'map_entry' attribute in object 'to', with 'piece' using the mapping 'mapping'
 def mapping_substitute(to, piece, mapping, map_entry):
@@ -130,18 +106,12 @@ def mapping_substitute(to, piece, mapping, map_entry):
 
 
 # insert parsed feed into a WebFeed object.
-def Atom_Insert(parsed_xml, feed):
+def atom_insert(parsed_xml, feed):
     
     for piece in parsed_xml:
         tag = piece.tag.split('}', 1)[1]
 
         mapping_substitute(feed, piece, atom_mapping, tag)
-
-
-
-class Settings():
-    def __init__(self):
-        feed_list = []
 
 
 
@@ -163,7 +133,6 @@ def create_tables(connection):
         subtitle TEXT,
         feed_meta TEXT)''')
     
-    
     c.execute('''CREATE TABLE entries (
         feed_id INTEGER,
         uri TEXT
@@ -174,5 +143,10 @@ def create_tables(connection):
         content TEXT,
         published INTEGER)''')
 
-    
     connection.commit()
+
+def init():
+    return
+
+def add_atom_file(file):
+    return
