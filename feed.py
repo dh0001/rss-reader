@@ -1,4 +1,5 @@
 
+import defusedxml.ElementTree as ElemTree
 
 # Append an Article object corresponding to entry to list of Articles to.
 def article_append(to, entry):
@@ -6,11 +7,10 @@ def article_append(to, entry):
 
     for piece in entry:
 
-        # 
         tag = piece.tag.split('}', 1)[1]
         mapping_substitute (new_article, piece, atom_article_mapping, tag)
     
-    to.articles.append(entry)
+    to.articles.append(new_article)
 
 # class which holds a generic information from a website feed.
 class WebFeed:
@@ -20,24 +20,25 @@ class WebFeed:
         self.title = None
         self.author = None
         self.author_uri = None
+        self.category = None
         self.updated = None
         self.icon = None
         self.subtitle = None
         self.feed_meta = None
+        self.articles = []
 
 
 # generic representation of an article in a feed.
 class Article:
     def __init__(self):
         self.identifier = None
-        self.feed_id = None
         self.uri = None
         self.title = None
         self.updated = None
         self.author = None
         self.author_uri = None
         self.content = None
-        self.category = []
+        self.category = None
         self.published = None
 
 
@@ -66,7 +67,7 @@ atom_article_mapping = {
     "updated" : "updated",
     "author" : "author",
     "content" : "content",
-    "link" : "link",
+    "link" : "uri",
     "summary" : "summary",
     "category" : "categories",
     "contributor" : "contributor",
@@ -75,10 +76,6 @@ atom_article_mapping = {
     "source" : "source",
     "entry" : article_append,
 }
-
-
-
-
 
 
 
@@ -99,3 +96,11 @@ def atom_insert(parsed_xml, feed):
         tag = piece.tag.split('}', 1)[1]
 
         mapping_substitute(feed, piece, atom_mapping, tag)
+
+
+
+# with open("Output.xml", "rb") as file:
+#     rss = file.read().decode("utf-8")
+#     feed = WebFeed()
+#     atom_insert(ElemTree.fromstring(rss), feed)
+#     print("done")
