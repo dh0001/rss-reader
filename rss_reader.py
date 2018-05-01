@@ -12,11 +12,12 @@ import settings
 
 settings.init()
 feeds.init()
-view.init()
+view.init("abc")
 
 db = sqlite3.connect(':memory:')
 
 feeds.create_tables(db)
 feeds.add_atom_file("http://reddit.com/.rss")
+view.output()
 
 db.close()
