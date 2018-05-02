@@ -1,11 +1,18 @@
 
+import feed
 
-feed_manager = None
+class View():
 
-def init(feed_mgr):
-    feed_manager = feed_mgr
+    feed_manager = None
+
+    def __init__(self, feed_mgr):
+        self.feed_manager = feed_mgr
 
 
 
-def output():
-    return
+    def output(self):
+        feeds = self.feed_manager.get_feeds()
+        for feed in feeds:
+            print (feed.title)
+            for article in feed.articles:
+                print (article.title)

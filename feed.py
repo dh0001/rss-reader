@@ -1,4 +1,3 @@
-
 import defusedxml.ElementTree as ElemTree
 
 # Append an Article object corresponding to entry to list of Articles to.
@@ -69,12 +68,11 @@ atom_article_mapping = {
     "content" : "content",
     "link" : "uri",
     "summary" : "summary",
-    "category" : "categories",
+    "category" : "category",
     "contributor" : "contributor",
     "published" : "published",
     "rights" : "rights",
-    "source" : "source",
-    "entry" : article_append,
+    "source" : "source"
 }
 
 

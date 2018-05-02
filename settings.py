@@ -1,4 +1,3 @@
 
-
-def init():
-    return
+class Settings():
+    settings = None

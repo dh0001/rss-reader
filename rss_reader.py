@@ -1,23 +1,25 @@
+
 # packages
 import sqlite3
 import requests
 
 # own modules
-import sql_feed_manager as feeds
-import view
-import settings
+import sql_feed_manager
+import view as view_class
+import settings as settings_class
 
 
 
 
-settings.init()
-feeds.init()
-view.init("abc")
+settings = settings_class.Settings()
+feed_manager = sql_feed_manager.FeedManager()
+view = view_class.View(feed_manager)
+
 
 db = sqlite3.connect(':memory:')
 
-feeds.create_tables(db)
-feeds.add_atom_file("http://reddit.com/.rss")
+feed_manager.create_tables(db)
+feed_manager.add_file_from_disk("Output.xml")
 view.output()
 
 db.close()
