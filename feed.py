@@ -1,4 +1,5 @@
 import defusedxml.ElementTree as ElemTree
+from typing import List
 
 # Append an Article object corresponding to entry to list of Articles to.
 def article_append(to, entry):
@@ -13,7 +14,9 @@ def article_append(to, entry):
 
 # class which holds a generic information from a website feed.
 class WebFeed:
+
     def __init__(self):
+
         self.identifier = None
         self.uri = None
         self.title = None

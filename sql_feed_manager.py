@@ -6,13 +6,17 @@ import feed
 
 class FeedManager():
 
-    feeds = None
-
-    def __init__(self):
+    def __init__(self, settings):
         self.feeds = []
+        self.settings = settings
+        self.connection = sqlite3.connect(settings.db_file)
 
-    def create_tables(self, connection):
-        c = connection.cursor()
+    def cleanup(self):
+        self.connection.close()
+
+    # create tables in sql
+    def create_tables(self):
+        c = self.connection.cursor()
         c.execute('''CREATE TABLE feeds (
             uri TEXT,
             title TEXT
@@ -32,23 +36,48 @@ class FeedManager():
             author_uri TEXT,
             content TEXT,
             published INTEGER)''')
-        connection.commit()
+        self.connection.commit()
 
-    def init(self):
-        return
 
-    def add_atom_file(self, file):
-        data = download_rss_file(file)
-        feed.atom_insert(EleTree.fromstring(data), self.feeds)
+    def add_feed_to_database(self, feed:feed.WebFeed):
+        c = self.connection.cursor()
 
-    def add_file_from_disk(self, location):
-        data = load_rss_from_disk(location)
+        # add entry to feeds
+        c.execute('''INSERT INTO feeds
+            VALUES (? ? ? ? ? ? ? ? ?)''', feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.subtitle, feed.feed_meta)
+        id = c.lastrowid
+
+        # add articles to entries
+        entries = []
+        for article in feed.articles:
+            entries.append((id, article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published, 3))
+
+        c.executemany('''INSERT INTO entries
+            VALUES (? ? ? ? ? ? ? ? ?)''', entries)
+
+    # add 
+    def add_atom_file(self, data):
         new_feed = feed.WebFeed()
         feed.atom_insert(EleTree.fromstring(data), new_feed)
         self.feeds.append(new_feed)
 
+    # add new feed to feeds from disk.
+    def add_file_from_disk(self, location):
+        data = load_rss_from_disk(location)
+        self.add_atom_file(data)
+
+
+    # add new feed to feeds from web.
+    def add_file_from_web(self, file):
+        data = download_rss_file(file)
+        self.add_atom_file(data)
+
+
+    # returns the feeds array.
     def get_feeds(self):
         return self.feeds
+
+    
  
  
 def download_rss_file(uri):
@@ -63,3 +92,8 @@ def load_rss_from_disk(f):
     with open(f, "rb") as file:
         rss = file.read().decode("utf-8")
         return rss
+
+
+# 
+def refresh_feed(feed:feed.WebFeed):
+    return
