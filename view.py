@@ -4,9 +4,9 @@ import sql_feed_manager
 
 class View():
 
-    feed_manager = None
 
     def __init__(self, feed_mgr:sql_feed_manager.FeedManager):
+        self.feed_manager : sql_feed_manager.FeedManager
         self.feed_manager = feed_mgr
 
 
@@ -16,4 +16,14 @@ class View():
         for feed in feeds:
             print (feed.title)
             for article in feed.articles:
-                print (article.title)
+                print (article.title, article.author, "")
+
+
+    def console_ui(self):
+        while(1):
+            self.std_output()
+            command = input("Waiting for input")
+            if (command == "refresh"):
+                self.feed_manager.refresh()
+            elif (command == "exit"):
+                return
