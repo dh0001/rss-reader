@@ -6,17 +6,24 @@ def article_append(to, entry):
     new_article = Article()
 
     for piece in entry:
-
         tag = piece.tag.split('}', 1)[1]
         mapping_substitute (new_article, piece, atom_article_mapping, tag)
     
     to.articles.append(new_article)
 
+
+def author_insert(to, entry):
+    for piece in entry:
+        tag = piece.tag.split('}', 1)[1]
+        if (tag == "name"):
+            to.author = piece.text
+
+
+
 # class which holds a generic information from a website feed.
 class WebFeed:
 
     def __init__(self):
-
         self.identifier = None
         self.uri = None
         self.title = None
@@ -52,7 +59,7 @@ atom_mapping = {
     "id" : "uri",
     "title" : "title",
     "updated" : "updated",
-    "author" : "author",
+    "author" : author_insert,
     "link" : None,
     "category" : "category",
     "contributor" : None,
@@ -67,7 +74,7 @@ atom_article_mapping = {
     "id" : "identifier",
     "title" : "title",
     "updated" : "updated",
-    "author" : "author",
+    "author" : author_insert,
     "content" : "content",
     "link" : "uri",
     "summary" : "summary",
@@ -78,16 +85,14 @@ atom_article_mapping = {
     "source" : "source"
 }
 
+# substitute the attribute with name 'key' in object 'obj' with 'value'.
+def mapping_substitute(obj, value, dict, key):
 
+    if (callable(dict[key])):
+        dict[key](obj, value)
 
-# substitute the 'map_entry' attribute in object 'to', with 'piece' using the mapping 'mapping'
-def mapping_substitute(to, piece, mapping, map_entry):
-
-    if (callable(mapping[map_entry])):
-        mapping[map_entry](to, piece)
-
-    elif (isinstance(mapping[map_entry], str)):
-        setattr(to, mapping[map_entry], piece.text)
+    elif (isinstance(dict[key], str)):
+        setattr(obj, dict[key], value.text)
 
 
 # insert parsed feed into a WebFeed object.
@@ -97,11 +102,3 @@ def atom_insert(parsed_xml, feed):
         tag = piece.tag.split('}', 1)[1]
 
         mapping_substitute(feed, piece, atom_mapping, tag)
-
-
-
-# with open("Output.xml", "rb") as file:
-#     rss = file.read().decode("utf-8")
-#     feed = WebFeed()
-#     atom_insert(ElemTree.fromstring(rss), feed)
-#     print("done")

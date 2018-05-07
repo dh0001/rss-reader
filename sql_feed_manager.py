@@ -2,6 +2,7 @@ import sqlite3
 import requests
 import defusedxml.ElementTree as EleTree
 import feed as feedutility
+import sched
 
 
 class FeedManager():
@@ -39,7 +40,7 @@ class FeedManager():
         self.connection.commit()
 
 
-    def add_feed_to_database(self, feed:feed.WebFeed):
+    def add_feed_to_database(self, feed:feedutility.WebFeed):
         c = self.connection.cursor()
 
         # add entry to feeds
@@ -107,6 +108,6 @@ def load_rss_from_disk(f):
 
 
 # refresh data in feed.  Does not clear existing data.
-def refresh_feed(feed:feed.WebFeed):
+def refresh_feed(feed:feedutility.WebFeed):
     data = download_file(feed.uri)
     feedutility.atom_insert(EleTree.fromstring(data), feed)
