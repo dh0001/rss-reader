@@ -10,7 +10,9 @@ class FeedManager():
     def __init__(self, settings):
         self.feeds = []
         self.settings = settings
-        self.connection = sqlite3.connect(settings.db_file)
+        self.connection = sqlite3.connect(settings.settings["db_file"])
+        #self.create_tables()
+        self.read_feeds_from_database()
 
     def cleanup(self):
         self.connection.close()
@@ -60,41 +62,56 @@ class FeedManager():
         self.connection.commit()
 
 
-    # add 
-    def add_atom_file(self, data):
+    # read data from database
+    def read_feeds_from_database(self):
+        c = self.connection.cursor()
+
+        new_feed = feedutility.WebFeed()
+        for feed in c.execute('''SELECT * FROM feeds'''):
+            new_feed.author = feed[0]
+        
+        self.feeds.append(new_feed)
+
+
+    # add feed data to database.
+    def _add_atom_file(self, data):
         new_feed = feedutility.WebFeed()
         feedutility.atom_insert(EleTree.fromstring(data), new_feed)
         self.feeds.append(new_feed)
 
 
-    # add new feed to feeds from disk.
+    # add new feed to database from disk.
     def add_file_from_disk(self, location):
         data = load_rss_from_disk(location)
-        self.add_atom_file(data)
+        self._add_atom_file(data)
 
 
-    # add new feed to feeds from web.
+    # add new feed to database from web.
     def add_file_from_web(self, file):
         data = download_file(file)
-        self.add_atom_file(data)
+        self._add_atom_file(data)
 
 
-    # returns the feeds array.
+    # returns all the feeds in the database.
     def get_feeds(self):
         return self.feeds
 
 
-    # refresh all feeds in the feeds array.
+    # refresh all feeds in the database.
     def refresh(self):
         for feed in self.feeds:
             refresh_feed(feed)
+
+    # removes a feed from the database.
+    def delete_feed(self):
+        return
 
     
  
 # HTTP GET request for file, with headers indicating application.
 def download_file(uri):
     headers = {'User-Agent' : 'python-rss-reader-side-project'}
-    return requests.get(uri, headers=headers)
+    return requests.get(uri, headers=headers).text
 
 def write_string_to_file(str):
     text_file = open("Output.xml", "w", encoding="utf-8")

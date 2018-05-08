@@ -22,7 +22,6 @@ def author_insert(to, entry):
 
 # class which holds a generic information from a website feed.
 class WebFeed:
-
     def __init__(self):
         self.identifier = None
         self.uri = None
