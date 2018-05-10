@@ -29,7 +29,6 @@ class FeedManager():
         """
         Creates all the tables used in rss-reader.
         """
-
         c = self.connection.cursor()
         c.execute('''CREATE TABLE feeds (
             uri TEXT,
@@ -53,14 +52,15 @@ class FeedManager():
         self.connection.commit()
 
 
-    def _add_feed_to_database(self, feed:feedutility.WebFeed):
+    def _add_feed_to_database(self, feed:feedutility.WebFeed) -> int:
         """
-        add a feed entry into the database.
+        Add a feed entry into the database. Returns the row id of the inserted entry.
         """
         c = self.connection.cursor()
         c.execute('''INSERT INTO feeds
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.subtitle, feed.feed_meta])
         self.connection.commit()
+        return c.lastrowid
 
 
     def _add_articles_to_database(self, articles, id):
@@ -99,7 +99,6 @@ class FeedManager():
         Returns a list containing all the articles with feed_id "id".
         """
         c = self.connection.cursor()
-        
         articles = []
         for article in c.execute('''SELECT * FROM articles WHERE feed_id = ?''', id):
             new_article = feedutility.Article()
@@ -110,12 +109,14 @@ class FeedManager():
 
     def _add_atom_file(self, data, location):
         """
-        Add data to database.
+        Add atom feed data to database.
         """
         new_feed = feedutility.WebFeed()
+        new_articles = []
         feedutility.atom_insert(EleTree.fromstring(data), new_feed)
         new_feed.uri = location
-        self._add_feed_to_database(new_feed)
+        id = self._add_feed_to_database(new_feed)
+        self._add_articles_to_database(new_articles, id)
 
 
     def add_file_from_disk(self, location):

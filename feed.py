@@ -1,27 +1,8 @@
 import defusedxml.ElementTree as ElemTree
 from typing import List
+import collections
 
-# 
-def _article_append(to, entry):
-    """
-    Append an Article object corresponding to entry to list of Articles to.
-    """
-    new_article = Article()
-    for piece in entry:
-        tag = piece.tag.split('}', 1)[1]
-        mapping_substitute (new_article, piece, atom_article_mapping, tag)
-    to.articles.append(new_article)
-
-
-def _author_insert(to, entry):
-    """
-    Insert the "name" tag into to.author.
-    """
-    for piece in entry:
-        tag = piece.tag.split('}', 1)[1]
-        if (tag == "name"):
-            to.author = piece.text
-
+CompleteFeed = collections.namedtuple('CompleteFeed', ['feed', 'articles'])
 
 class WebFeed:
     """
@@ -54,6 +35,27 @@ class Article:
         self.content = None
         self.category = None
         self.published = None
+
+
+def _article_append(to: WebFeed, entry):
+    """
+    Append an Article object corresponding to entry to list of Articles to.
+    """
+    new_article = Article()
+    for piece in entry:
+        tag = piece.tag.split('}', 1)[1]
+        _feed_substitute (new_article, piece, atom_article_mapping, tag)
+    to.articles.append(new_article)
+
+
+def _author_insert(to, entry):
+    """
+    Insert the "name" tag into to.author.
+    """
+    for piece in entry:
+        tag = piece.tag.split('}', 1)[1]
+        if (tag == "name"):
+            to.author = piece.text
 
 
 feed_mapping = {
@@ -91,20 +93,22 @@ atom_article_mapping = {
 }
 
 
-def mapping_substitute(obj, value, dict, key):
+def _feed_substitute(obj, value, dict, key):
     """
-    Generic function substituting the attribute with name 'key' in object 'obj' with 'value'.
+    Substitutes the attribute with the name corresponding to the 'dict' in object 'obj' with 'value'.
     """
     if (callable(dict[key])):
         dict[key](obj, value)
     elif (isinstance(dict[key], str)):
-        setattr(obj, dict[key], value.text)
+        setattr(obj.feed, dict[key], value.text)
 
 
-def atom_insert(parsed_xml, feed):
+def atom_insert(parsed_xml) -> CompleteFeed:
     """
-    insert parsed feed into a WebFeed object.
+    Takes in parsed xml "parsed_xml" corresponding to an atom feed, and returns a CompleteFeed, containing the Feed and a list of Article.
     """
-    for piece in parsed_xml:
-        tag = piece.tag.split('}', 1)[1]
-        mapping_substitute(feed, piece, atom_mapping, tag)
+    new_feed = CompleteFeed
+    for child in parsed_xml:
+        tag = child.tag.split('}', 1)[1]
+        _feed_substitute(new_feed, child, atom_mapping, tag)
+    
