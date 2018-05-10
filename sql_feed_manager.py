@@ -7,22 +7,31 @@ import sched
 
 class FeedManager():
 
+    # initialization.
     def __init__(self, settings):
-        self.feeds = []
         self.settings = settings
         self.connection = sqlite3.connect(settings.settings["db_file"])
-        #self.create_tables()
-        self.read_feeds_from_database()
+
+        if self.settings.settings["first-run"] == "true":
+            self.create_tables()
+
 
     def cleanup(self):
+        """
+        Should be called to clean up.
+        """
         self.connection.close()
 
-    # create tables in sql
+
     def create_tables(self):
+        """
+        Creates all the tables used in rss-reader.
+        """
+
         c = self.connection.cursor()
         c.execute('''CREATE TABLE feeds (
             uri TEXT,
-            title TEXT
+            title TEXT,
             author TEXT,
             author_uri TEXT,
             category TEXT,
@@ -32,7 +41,7 @@ class FeedManager():
             feed_meta TEXT)''')
         c.execute('''CREATE TABLE entries (
             feed_id INTEGER,
-            uri TEXT
+            uri TEXT,
             title TEXT,
             updated INTEGER,
             author TEXT,
@@ -42,65 +51,95 @@ class FeedManager():
         self.connection.commit()
 
 
-    def add_feed_to_database(self, feed:feedutility.WebFeed):
+    def _add_feed_to_database(self, feed:feedutility.WebFeed):
+        """
+        add a feed entry into the database.
+        """
         c = self.connection.cursor()
-
-        # add entry to feeds
         c.execute('''INSERT INTO feeds
-            VALUES (? ? ? ? ? ? ? ? ?)''', feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.subtitle, feed.feed_meta)
-        id = c.lastrowid
-        #####
-
-        # add articles to entries
-        entries = []
-        for article in feed.articles:
-            entries.append((id, article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published, 3))
-        #####
-
-        c.executemany('''INSERT INTO entries
-            VALUES (? ? ? ? ? ? ? ? ?)''', entries)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.subtitle, feed.feed_meta])
         self.connection.commit()
 
 
-    # read data from database
-    def read_feeds_from_database(self):
+    def _add_articles_to_database(self, articles, id):
+        """
+        Add multiple articles to database. articles should be a list.
+        """
         c = self.connection.cursor()
+        entries = []
+        for article in articles:
+            entries.append((id, article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published))
+        c.executemany('''INSERT INTO entries
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', entries)
+        self.connection.commit()
 
-        new_feed = feedutility.WebFeed()
+
+    def _read_feeds_from_database(self):
+        """
+        Returns a list containing all the feeds in the database.
+        """
+        c = self.connection.cursor()
+        feeds = []
         for feed in c.execute('''SELECT * FROM feeds'''):
-            new_feed.author = feed[0]
+            new_feed = feedutility.WebFeed()
+            new_feed.uri = feed[0]
+            new_feed.title = feed[1]
+            new_feed.author = feed[2]
+            new_feed.author_uri = feed[3]
+            new_feed.category = feed[4]
+            new_feed.updated = feed[5]
+            feeds.append(new_feed)
+        return feeds
+
+
+    def _read_articles_from_database(self, id):
+        """
+        Returns a list containing all the articles with feed_id "id".
+        """
+        c = self.connection.cursor()
         
-        self.feeds.append(new_feed)
+        articles = []
+        for article in c.execute('''SELECT * FROM articles WHERE feed_id = ?''', id):
+            new_article = feedutility.Article()
+            new_article.title = article[1]
+            articles.append(new_article)
+        return articles
 
 
-    # add feed data to database.
-    def _add_atom_file(self, data):
+    def _add_atom_file(self, data, location):
+        """
+        Add data to database.
+        """
         new_feed = feedutility.WebFeed()
         feedutility.atom_insert(EleTree.fromstring(data), new_feed)
-        self.feeds.append(new_feed)
+        new_feed.uri = location
+        self._add_feed_to_database(new_feed)
 
 
-    # add new feed to database from disk.
     def add_file_from_disk(self, location):
+        """
+        add new feed to database from disk.
+        """
         data = load_rss_from_disk(location)
-        self._add_atom_file(data)
+        self._add_atom_file(data, location)
 
 
-    # add new feed to database from web.
-    def add_file_from_web(self, file):
+    def add_feed_from_web(self, file):
+        """
+        add new feed to database from web.
+        """
         data = download_file(file)
-        self._add_atom_file(data)
+        self._add_atom_file(data, file)
 
 
     # returns all the feeds in the database.
     def get_feeds(self):
-        return self.feeds
+        return self._read_feeds_from_database()
 
 
     # refresh all feeds in the database.
     def refresh(self):
-        for feed in self.feeds:
-            refresh_feed(feed)
+        return
 
     # removes a feed from the database.
     def delete_feed(self):

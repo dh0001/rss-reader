@@ -33,7 +33,6 @@ class WebFeed:
         self.icon = None
         self.subtitle = None
         self.feed_meta = None
-        self.articles = []
 
 
 # generic representation of an article in a feed.

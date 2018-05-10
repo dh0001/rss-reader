@@ -17,9 +17,8 @@ class View():
         feeds = self.feed_manager.get_feeds()
         for feed in feeds:
             print ("Feed: ", feed.title)
-            for article in feed.articles:
-                print ("Article: ", article.title, "By: ", article.author)
-
+            print ("Last Updated: ", feed.updated)
+ 
 
     def console_ui(self):
         while(1):
@@ -31,7 +30,7 @@ class View():
                 return
             elif (command == "add"):
                 feed = input("add feed > ")
-                self.feed_manager.add_file_from_web(feed)
+                self.feed_manager.add_feed_from_web(feed)
             elif (command == "delete"):
                 feed = input("delete feed > ")
                 self.feed_manager.delete_feed(feed)
