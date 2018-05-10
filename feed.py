@@ -1,27 +1,32 @@
 import defusedxml.ElementTree as ElemTree
 from typing import List
 
-# Append an Article object corresponding to entry to list of Articles to.
-def article_append(to, entry):
+# 
+def _article_append(to, entry):
+    """
+    Append an Article object corresponding to entry to list of Articles to.
+    """
     new_article = Article()
-
     for piece in entry:
         tag = piece.tag.split('}', 1)[1]
         mapping_substitute (new_article, piece, atom_article_mapping, tag)
-    
     to.articles.append(new_article)
 
 
-def author_insert(to, entry):
+def _author_insert(to, entry):
+    """
+    Insert the "name" tag into to.author.
+    """
     for piece in entry:
         tag = piece.tag.split('}', 1)[1]
         if (tag == "name"):
             to.author = piece.text
 
 
-
-# class which holds a generic information from a website feed.
 class WebFeed:
+    """
+    class which holds a generic information from a website feed.
+    """
     def __init__(self):
         self.identifier = None
         self.uri = None
@@ -35,8 +40,10 @@ class WebFeed:
         self.feed_meta = None
 
 
-# generic representation of an article in a feed.
 class Article:
+    """
+    Generic representation of an article in a feed.
+    """
     def __init__(self):
         self.identifier = None
         self.uri = None
@@ -57,7 +64,7 @@ atom_mapping = {
     "id" : "uri",
     "title" : "title",
     "updated" : "updated",
-    "author" : author_insert,
+    "author" : _author_insert,
     "link" : None,
     "category" : "category",
     "contributor" : None,
@@ -65,14 +72,14 @@ atom_mapping = {
     "logo" : None,
     "rights" : None,
     "subtitle" : "subtitle",
-    "entry" : article_append,
+    "entry" : _article_append,
 }
 
 atom_article_mapping = {
     "id" : "identifier",
     "title" : "title",
     "updated" : "updated",
-    "author" : author_insert,
+    "author" : _author_insert,
     "content" : "content",
     "link" : "uri",
     "summary" : "summary",
@@ -83,20 +90,21 @@ atom_article_mapping = {
     "source" : "source"
 }
 
-# substitute the attribute with name 'key' in object 'obj' with 'value'.
-def mapping_substitute(obj, value, dict, key):
 
+def mapping_substitute(obj, value, dict, key):
+    """
+    Generic function substituting the attribute with name 'key' in object 'obj' with 'value'.
+    """
     if (callable(dict[key])):
         dict[key](obj, value)
-
     elif (isinstance(dict[key], str)):
         setattr(obj, dict[key], value.text)
 
 
-# insert parsed feed into a WebFeed object.
 def atom_insert(parsed_xml, feed):
-    
+    """
+    insert parsed feed into a WebFeed object.
+    """
     for piece in parsed_xml:
         tag = piece.tag.split('}', 1)[1]
-
         mapping_substitute(feed, piece, atom_mapping, tag)

@@ -7,8 +7,10 @@ import sched
 
 class FeedManager():
 
-    # initialization.
     def __init__(self, settings):
+        """
+        initialization.
+        """
         self.settings = settings
         self.connection = sqlite3.connect(settings.settings["db_file"])
 
@@ -132,38 +134,53 @@ class FeedManager():
         self._add_atom_file(data, file)
 
 
-    # returns all the feeds in the database.
     def get_feeds(self):
+        """
+        returns all the feeds in the database.
+        """
         return self._read_feeds_from_database()
 
 
-    # refresh all feeds in the database.
     def refresh(self):
+        """
+        refresh all feeds in the database.
+        """
         return
 
-    # removes a feed from the database.
     def delete_feed(self):
+        """
+        removes a feed from the database.
+        """
         return
 
     
- 
-# HTTP GET request for file, with headers indicating application.
 def download_file(uri):
+    """
+    HTTP GET request for file, with headers indicating application.
+    """
     headers = {'User-Agent' : 'python-rss-reader-side-project'}
     return requests.get(uri, headers=headers).text
 
 def write_string_to_file(str):
+    """
+    Write string to a file Output.xml.
+    """
     text_file = open("Output.xml", "w", encoding="utf-8")
     text_file.write(str)
     return
 
 def load_rss_from_disk(f):
+    """
+    Returns content in file "f".
+    """
     with open(f, "rb") as file:
         rss = file.read().decode("utf-8")
         return rss
 
 
-# refresh data in feed.  Does not clear existing data.
 def refresh_feed(feed:feedutility.WebFeed):
+    """
+    Refresh data in feed. Does not clear existing data.
+    """
     data = download_file(feed.uri)
     feedutility.atom_insert(EleTree.fromstring(data), feed)

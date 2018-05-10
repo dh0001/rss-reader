@@ -6,6 +6,9 @@ from shutil import copyfile
 class Settings():
     
     def __init__(self, file:str):
+        """
+        initialization.
+        """
         self.settings : dict
         self.settings_file = file
 
@@ -17,5 +20,8 @@ class Settings():
             self.settings = json.loads(s)
 
     def cleanup(self):
+        """
+        cleanup.
+        """
         with open (self.settings_file, "w") as f:
             f.write(json.dumps(self.settings))
