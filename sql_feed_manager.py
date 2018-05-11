@@ -20,7 +20,7 @@ class FeedManager():
 
     def cleanup(self):
         """
-        Should be called to clean up.
+        Should be called before program exit.
         """
         self.connection.close()
 
@@ -40,7 +40,7 @@ class FeedManager():
             icon_uri TEXT,
             subtitle TEXT,
             feed_meta TEXT)''')
-        c.execute('''CREATE TABLE entries (
+        c.execute('''CREATE TABLE articles (
             feed_id INTEGER,
             uri TEXT,
             title TEXT,
@@ -57,8 +57,8 @@ class FeedManager():
         Add a feed entry into the database. Returns the row id of the inserted entry.
         """
         c = self.connection.cursor()
-        c.execute('''INSERT INTO feeds
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.subtitle, feed.feed_meta])
+        c.execute('''INSERT INTO feeds VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
+            [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.subtitle, feed.feed_meta])
         self.connection.commit()
         return c.lastrowid
 
@@ -71,8 +71,7 @@ class FeedManager():
         entries = []
         for article in articles:
             entries.append((id, article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published))
-        c.executemany('''INSERT INTO entries
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', entries)
+        c.executemany('''INSERT INTO entries VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', entries)
         self.connection.commit()
 
 
@@ -94,15 +93,19 @@ class FeedManager():
         return feeds
 
 
-    def _read_articles_from_database(self, id):
+    def get_articles(self, id):
         """
         Returns a list containing all the articles with feed_id "id".
         """
         c = self.connection.cursor()
         articles = []
-        for article in c.execute('''SELECT * FROM articles WHERE feed_id = ?''', id):
+        for article in c.execute('''SELECT * FROM articles WHERE feed_id = ?''', [id]):
             new_article = feedutility.Article()
-            new_article.title = article[1]
+            new_article.title = article[2]
+            new_article.updated = article[3]
+            new_article.author = article[4]
+            new_article.author_uri = article[5]
+            new_article.content = article[6]
             articles.append(new_article)
         return articles
 
@@ -111,9 +114,9 @@ class FeedManager():
         """
         Add atom feed data to database.
         """
-        new_feed = feedutility.WebFeed()
-        new_articles = []
-        feedutility.atom_insert(EleTree.fromstring(data), new_feed)
+        output = feedutility.atom_parse(EleTree.fromstring(data))
+        new_articles = output.articles
+        new_feed = output.feed
         new_feed.uri = location
         id = self._add_feed_to_database(new_feed)
         self._add_articles_to_database(new_articles, id)
@@ -179,9 +182,8 @@ def load_rss_from_disk(f):
         return rss
 
 
-def refresh_feed(feed:feedutility.WebFeed):
+def refresh_all() -> None:
     """
     Refresh data in feed. Does not clear existing data.
     """
-    data = download_file(feed.uri)
-    feedutility.atom_insert(EleTree.fromstring(data), feed)
+    return

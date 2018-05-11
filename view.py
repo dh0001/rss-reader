@@ -20,26 +20,37 @@ class View():
 
 
 
-    def std_output(self):
+    def _std_output_feeds(self):
         """
         Outputs contents of feeds_cache.
         """
         for feed in self.feeds_cache:
             print ("Feed: ", feed.title)
             print ("Last Updated: ", feed.updated)
+
+    def _std_output_articles(self) -> None:
+        """
+        Output contents of articles_cache.
+        """
+        for article in self.articles_cache:
+            print ("Article: ", article.title)
  
 
     def console_ui(self):
         """
-        Starts the UI in the console.
+        Starts the UI in console mode.
         """
-
         self.feeds_cache = self.feed_manager.get_feeds()
         while(1):
-            self.std_output()
+            self._std_output_feeds()
             command = input("> ")
-            if (command == "refresh"):
+            if (command.isdigit()):
+                self.articles_cache = self.feed_manager.get_articles(int(command))
+                self._std_output_articles()
+                input("continue > ")
+            elif (command == "refresh"):
                 self.feed_manager.refresh()
+                self.feeds_cache = self.feed_manager.get_feeds()
             elif (command == "exit"):
                 return
             elif (command == "add"):

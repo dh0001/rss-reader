@@ -1,8 +1,6 @@
 import defusedxml.ElementTree as ElemTree
-from typing import List
+from typing import List, NamedTuple
 import collections
-
-CompleteFeed = collections.namedtuple('CompleteFeed', ['feed', 'articles'])
 
 class WebFeed:
     """
@@ -37,14 +35,17 @@ class Article:
         self.published = None
 
 
+CompleteFeed = NamedTuple('CompleteFeed', [('feed', WebFeed), ('articles', List[Article])])
+
+
 def _article_append(to: WebFeed, entry):
     """
     Append an Article object corresponding to entry to list of Articles to.
     """
     new_article = Article()
-    for piece in entry:
-        tag = piece.tag.split('}', 1)[1]
-        _feed_substitute (new_article, piece, atom_article_mapping, tag)
+    for child in entry:
+        tag = child.tag.split('}', 1)[1]
+        _substitute(new_article, child, atom_article_mapping, tag)
     to.articles.append(new_article)
 
 
@@ -55,7 +56,7 @@ def _author_insert(to, entry):
     for piece in entry:
         tag = piece.tag.split('}', 1)[1]
         if (tag == "name"):
-            to.author = piece.text
+            to.feed.author = piece.text
 
 
 feed_mapping = {
@@ -93,7 +94,7 @@ atom_article_mapping = {
 }
 
 
-def _feed_substitute(obj, value, dict, key):
+def _feed_substitute(obj, value, dict, key) -> None:
     """
     Substitutes the attribute with the name corresponding to the 'dict' in object 'obj' with 'value'.
     """
@@ -103,12 +104,23 @@ def _feed_substitute(obj, value, dict, key):
         setattr(obj.feed, dict[key], value.text)
 
 
-def atom_insert(parsed_xml) -> CompleteFeed:
+def _substitute(obj, value, dict, key) -> None:
+    """
+    Substitutes the attribute with the name corresponding to the 'dict' in object 'obj' with 'value'.
+    """
+    if (callable(dict[key])):
+        dict[key](obj, value)
+    elif (isinstance(dict[key], str)):
+        setattr(obj, dict[key], value.text)
+
+
+def atom_parse(parsed_xml) -> CompleteFeed:
     """
     Takes in parsed xml "parsed_xml" corresponding to an atom feed, and returns a CompleteFeed, containing the Feed and a list of Article.
     """
     new_feed = CompleteFeed
+    new_feed.articles = []
     for child in parsed_xml:
         tag = child.tag.split('}', 1)[1]
         _feed_substitute(new_feed, child, atom_mapping, tag)
-    
+    return new_feed
