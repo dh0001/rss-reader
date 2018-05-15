@@ -4,6 +4,7 @@ import defusedxml.ElementTree as defusxml
 import feed as feedutility
 import sched
 import datetime
+import dateutil.parser
 from typing import List
 
 
@@ -84,14 +85,15 @@ class FeedManager():
         """
         c = self.connection.cursor()
         feeds = []
-        for feed in c.execute('''SELECT * FROM feeds'''):
+        for feed in c.execute('''SELECT rowid, * FROM feeds'''):
             new_feed = feedutility.WebFeed()
-            new_feed.uri = feed[0]
-            new_feed.title = feed[1]
-            new_feed.author = feed[2]
-            new_feed.author_uri = feed[3]
-            new_feed.category = feed[4]
-            new_feed.updated = feed[5]
+            new_feed.db_id = feed[0]
+            new_feed.uri = feed[1]
+            new_feed.title = feed[2]
+            new_feed.author = feed[3]
+            new_feed.author_uri = feed[4]
+            new_feed.category = feed[5]
+            new_feed.updated = feed[6]
             feeds.append(new_feed)
         return feeds
 
@@ -164,7 +166,7 @@ class FeedManager():
         subtitle = ?,
         feed_meta = ? 
         WHERE rowid = ?''', 
-        [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.feed_meta, feed.db_id])
+        [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.subtitle, feed.feed_meta, feed.db_id])
         self.connection.commit()
         return
 
@@ -176,8 +178,10 @@ class FeedManager():
         feeds = self.get_feeds()
         for feed in feeds:
             data = feedutility.atom_parse(_download_xml(feed.uri))
+            data.feed.db_id = feed.db_id
+            data.feed.db_id = feed.uri
             self._update_feed(data.feed)
-            _get_new_articles(data, feed)
+            self._add_articles_to_database(_get_new_articles(data, feed), feed.db_id)
             
 
 
@@ -193,8 +197,9 @@ def _get_new_articles(cf: feedutility.CompleteFeed, f: feedutility.WebFeed) -> L
     Takes a CompleteFeed, a feed, and returns the new articles in the CompleteFeed.
     """
     old_date = f.updated
-    new_articles = [x for x in cf.articles if datetime.datetime.strptime(x.updated, "%G") > datetime.datetime.strptime(old_date, "%G")]
+    new_articles = [x for x in cf.articles if dateutil.parser.parse(x.updated) > dateutil.parser.parse(old_date)]
     return new_articles
+    
 
 def _download_xml(uri) -> any:
     """

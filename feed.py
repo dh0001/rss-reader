@@ -7,17 +7,17 @@ class WebFeed:
     class which holds a generic information from a website feed.
     """
     def __init__(self):
-        self.db_id : int
-        self.identifier : str
-        self.uri : str
-        self.title : str
-        self.author : str
-        self.author_uri : str
-        self.category : str
-        self.updated : str
-        self.icon : str
-        self.subtitle : str
-        self.feed_meta : str
+        self.db_id : int = None
+        self.identifier : str = None
+        self.uri : str = None
+        self.title : str = None
+        self.author : str = None
+        self.author_uri : str = None
+        self.category : str = None
+        self.updated : str = None
+        self.icon : str = None
+        self.subtitle : str = None
+        self.feed_meta : str = None
 
 
 class Article:
@@ -25,15 +25,15 @@ class Article:
     Generic representation of an article in a feed.
     """
     def __init__(self):
-        self.identifier : str
-        self.uri : str
-        self.title : str
-        self.updated : str
-        self.author : str
-        self.author_uri : str
-        self.content : str
-        self.category : str
-        self.published : str
+        self.identifier : str = None
+        self.uri : str = None
+        self.title : str = None
+        self.updated : str = None
+        self.author : str = None
+        self.author_uri : str = None
+        self.content : str = None
+        self.category : str = None
+        self.published : str = None
 
 
 CompleteFeed = NamedTuple('CompleteFeed', [('feed', WebFeed), ('articles', List[Article])])
