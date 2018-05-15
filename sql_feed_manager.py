@@ -3,6 +3,8 @@ import requests
 import defusedxml.ElementTree as EleTree
 import feed as feedutility
 import sched
+import datetime
+from typing import List
 
 
 class FeedManager():
@@ -16,6 +18,7 @@ class FeedManager():
 
         if self.settings.settings["first-run"] == "true":
             self.create_tables()
+            self.settings.settings["first-run"] == "false"
 
 
     def cleanup(self):
@@ -71,7 +74,7 @@ class FeedManager():
         entries = []
         for article in articles:
             entries.append((id, article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published))
-        c.executemany('''INSERT INTO entries VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', entries)
+        c.executemany('''INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', entries)
         self.connection.commit()
 
 
@@ -114,7 +117,7 @@ class FeedManager():
         """
         Add atom feed data to database.
         """
-        output = feedutility.atom_parse(EleTree.fromstring(data))
+        output = feedutility.atom_parse(data)
         new_articles = output.articles
         new_feed = output.feed
         new_feed.uri = location
@@ -134,22 +137,49 @@ class FeedManager():
         """
         add new feed to database from web.
         """
-        data = download_file(file)
+        data = _download_xml(file)
         self._add_atom_file(data, file)
 
 
-    def get_feeds(self):
+    def get_feeds(self) -> List[feedutility.WebFeed]:
         """
         returns all the feeds in the database.
         """
         return self._read_feeds_from_database()
 
 
-    def refresh(self):
+    def _update_feed(self, feed: feedutility.WebFeed) -> None:
+        """
+        Update the corresponding feed in the database. Uses db_id to find the database entry.
+        """
+        c = self.connection.cursor()
+        c.execute('''UPDATE feeds SET
+        uri = ?,
+        title = ?,
+        author = ?,
+        author_uri = ?,
+        category = ?,
+        updated = ?,
+        icon_uri = ?,
+        subtitle = ?,
+        feed_meta = ? 
+        WHERE rowid = ?''', 
+        [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.feed_meta, feed.db_id])
+        self.connection.commit()
+        return
+
+
+    def refresh_all(self) -> None:
         """
         refresh all feeds in the database.
         """
-        return
+        feeds = self.get_feeds()
+        for feed in feeds:
+            data = feedutility.atom_parse(_download_xml(feed.uri))
+            self._update_feed(data.feed)
+            _get_new_articles(data, feed)
+            
+
 
     def delete_feed(self):
         """
@@ -158,12 +188,20 @@ class FeedManager():
         return
 
     
-def download_file(uri):
+def _get_new_articles(cf: feedutility.CompleteFeed, f: feedutility.WebFeed) -> List[feedutility.Article]:
+    """
+    Takes a CompleteFeed, a feed, and returns the new articles in the CompleteFeed.
+    """
+    old_date = f.updated
+    new_articles = [x for x in cf.articles if datetime.datetime.strptime(x.updated, "%G") > datetime.datetime.strptime(old_date, "%G")]
+    return new_articles
+
+def _download_xml(uri):
     """
     HTTP GET request for file, with headers indicating application.
     """
     headers = {'User-Agent' : 'python-rss-reader-side-project'}
-    return requests.get(uri, headers=headers).text
+    return EleTree.fromstring(requests.get(uri, headers=headers).text)
 
 def write_string_to_file(str):
     """
@@ -180,10 +218,3 @@ def load_rss_from_disk(f):
     with open(f, "rb") as file:
         rss = file.read().decode("utf-8")
         return rss
-
-
-def refresh_all() -> None:
-    """
-    Refresh data in feed. Does not clear existing data.
-    """
-    return

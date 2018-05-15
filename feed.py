@@ -7,6 +7,7 @@ class WebFeed:
     class which holds a generic information from a website feed.
     """
     def __init__(self):
+        self.db_id : int
         self.identifier = None
         self.uri = None
         self.title = None
@@ -49,7 +50,7 @@ def _article_append(to: WebFeed, entry):
     to.articles.append(new_article)
 
 
-def _author_insert(to, entry):
+def _author_cf_insert(to, entry):
     """
     Insert the "name" tag into to.author.
     """
@@ -57,6 +58,16 @@ def _author_insert(to, entry):
         tag = piece.tag.split('}', 1)[1]
         if (tag == "name"):
             to.feed.author = piece.text
+
+
+def _author_insert(to, entry):
+    """
+    Insert the "name" tag into to.author.
+    """
+    for piece in entry:
+        tag = piece.tag.split('}', 1)[1]
+        if (tag == "name"):
+            to.author = piece.text
 
 
 feed_mapping = {
@@ -67,7 +78,7 @@ atom_mapping = {
     "id" : "uri",
     "title" : "title",
     "updated" : "updated",
-    "author" : _author_insert,
+    "author" : _author_cf_insert,
     "link" : None,
     "category" : "category",
     "contributor" : None,
@@ -119,6 +130,7 @@ def atom_parse(parsed_xml) -> CompleteFeed:
     Takes in parsed xml "parsed_xml" corresponding to an atom feed, and returns a CompleteFeed, containing the Feed and a list of Article.
     """
     new_feed = CompleteFeed
+    new_feed.feed = WebFeed()
     new_feed.articles = []
     for child in parsed_xml:
         tag = child.tag.split('}', 1)[1]

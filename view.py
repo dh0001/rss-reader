@@ -49,7 +49,7 @@ class View():
                 self._std_output_articles()
                 input("continue > ")
             elif (command == "refresh"):
-                self.feed_manager.refresh()
+                self.feed_manager.refresh_all()
                 self.feeds_cache = self.feed_manager.get_feeds()
             elif (command == "exit"):
                 return
