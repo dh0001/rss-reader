@@ -1,6 +1,6 @@
 import sqlite3
 import requests
-import defusedxml.ElementTree as EleTree
+import defusedxml.ElementTree as defusxml
 import feed as feedutility
 import sched
 import datetime
@@ -21,14 +21,14 @@ class FeedManager():
             self.settings.settings["first-run"] == "false"
 
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         """
         Should be called before program exit.
         """
         self.connection.close()
 
 
-    def create_tables(self):
+    def create_tables(self) -> None:
         """
         Creates all the tables used in rss-reader.
         """
@@ -66,7 +66,7 @@ class FeedManager():
         return c.lastrowid
 
 
-    def _add_articles_to_database(self, articles, id):
+    def _add_articles_to_database(self, articles, id) -> None:
         """
         Add multiple articles to database. articles should be a list.
         """
@@ -78,7 +78,7 @@ class FeedManager():
         self.connection.commit()
 
 
-    def _read_feeds_from_database(self):
+    def _read_feeds_from_database(self) -> List[feedutility.WebFeed]:
         """
         Returns a list containing all the feeds in the database.
         """
@@ -96,7 +96,7 @@ class FeedManager():
         return feeds
 
 
-    def get_articles(self, id):
+    def get_articles(self, id) -> List[feedutility.Article]:
         """
         Returns a list containing all the articles with feed_id "id".
         """
@@ -113,7 +113,7 @@ class FeedManager():
         return articles
 
 
-    def _add_atom_file(self, data, location):
+    def _add_atom_file(self, data, location) -> None:
         """
         Add atom feed data to database.
         """
@@ -125,7 +125,7 @@ class FeedManager():
         self._add_articles_to_database(new_articles, id)
 
 
-    def add_file_from_disk(self, location):
+    def add_file_from_disk(self, location) -> None:
         """
         add new feed to database from disk.
         """
@@ -133,7 +133,7 @@ class FeedManager():
         self._add_atom_file(data, location)
 
 
-    def add_feed_from_web(self, file):
+    def add_feed_from_web(self, file) -> None:
         """
         add new feed to database from web.
         """
@@ -181,7 +181,7 @@ class FeedManager():
             
 
 
-    def delete_feed(self):
+    def delete_feed(self) -> None:
         """
         removes a feed from the database.
         """
@@ -196,14 +196,14 @@ def _get_new_articles(cf: feedutility.CompleteFeed, f: feedutility.WebFeed) -> L
     new_articles = [x for x in cf.articles if datetime.datetime.strptime(x.updated, "%G") > datetime.datetime.strptime(old_date, "%G")]
     return new_articles
 
-def _download_xml(uri):
+def _download_xml(uri) -> any:
     """
     HTTP GET request for file, with headers indicating application.
     """
     headers = {'User-Agent' : 'python-rss-reader-side-project'}
-    return EleTree.fromstring(requests.get(uri, headers=headers).text)
+    return defusxml.fromstring(requests.get(uri, headers=headers).text)
 
-def write_string_to_file(str):
+def write_string_to_file(str) -> None:
     """
     Write string to a file Output.xml.
     """
@@ -211,7 +211,7 @@ def write_string_to_file(str):
     text_file.write(str)
     return
 
-def load_rss_from_disk(f):
+def load_rss_from_disk(f) -> str:
     """
     Returns content in file "f".
     """

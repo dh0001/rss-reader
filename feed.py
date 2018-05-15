@@ -8,16 +8,16 @@ class WebFeed:
     """
     def __init__(self):
         self.db_id : int
-        self.identifier = None
-        self.uri = None
-        self.title = None
-        self.author = None
-        self.author_uri = None
-        self.category = None
-        self.updated = None
-        self.icon = None
-        self.subtitle = None
-        self.feed_meta = None
+        self.identifier : str
+        self.uri : str
+        self.title : str
+        self.author : str
+        self.author_uri : str
+        self.category : str
+        self.updated : str
+        self.icon : str
+        self.subtitle : str
+        self.feed_meta : str
 
 
 class Article:
@@ -25,21 +25,21 @@ class Article:
     Generic representation of an article in a feed.
     """
     def __init__(self):
-        self.identifier = None
-        self.uri = None
-        self.title = None
-        self.updated = None
-        self.author = None
-        self.author_uri = None
-        self.content = None
-        self.category = None
-        self.published = None
+        self.identifier : str
+        self.uri : str
+        self.title : str
+        self.updated : str
+        self.author : str
+        self.author_uri : str
+        self.content : str
+        self.category : str
+        self.published : str
 
 
 CompleteFeed = NamedTuple('CompleteFeed', [('feed', WebFeed), ('articles', List[Article])])
 
 
-def _article_append(to: WebFeed, entry):
+def _article_append(to: WebFeed, entry) -> None:
     """
     Append an Article object corresponding to entry to list of Articles to.
     """
@@ -50,7 +50,7 @@ def _article_append(to: WebFeed, entry):
     to.articles.append(new_article)
 
 
-def _author_cf_insert(to, entry):
+def _author_cf_insert(to, entry) -> None:
     """
     Insert the "name" tag into to.author.
     """
@@ -60,7 +60,7 @@ def _author_cf_insert(to, entry):
             to.feed.author = piece.text
 
 
-def _author_insert(to, entry):
+def _author_insert(to, entry) -> None:
     """
     Insert the "name" tag into to.author.
     """

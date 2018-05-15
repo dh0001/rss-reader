@@ -19,7 +19,7 @@ class Settings():
             s = f.read().decode("utf-8")
             self.settings = json.loads(s)
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         """
         cleanup.
         """

@@ -1,4 +1,3 @@
-
 import feed
 import sql_feed_manager
 import settings
@@ -20,7 +19,7 @@ class View():
 
 
 
-    def _std_output_feeds(self):
+    def _std_output_feeds(self) -> None:
         """
         Outputs contents of feeds_cache.
         """
@@ -36,7 +35,7 @@ class View():
             print ("Article: ", article.title)
  
 
-    def console_ui(self):
+    def console_ui(self) -> None:
         """
         Starts the UI in console mode.
         """
