@@ -5,6 +5,8 @@ import feed as feedutility
 import sched
 import datetime
 import dateutil.parser
+import time
+import threading
 from typing import List
 
 
@@ -15,11 +17,18 @@ class FeedManager():
         initialization.
         """
         self.settings = settings
-        self.connection = sqlite3.connect(settings.settings["db_file"])
+        self.connection = sqlite3.connect(settings.settings["db_file"], check_same_thread=False)
 
         if self.settings.settings["first-run"] == "true":
             self.create_tables()
             self.settings.settings["first-run"] == "false"
+
+        self.db_lock = threading._allocate_lock()
+        
+        self.refresh_schedule = sched.scheduler(time.time, time.sleep)
+        self.refresh_schedule.enter(settings.settings["refresh_time"], 1, self.scheduled_refresh)
+        self.refresh_schedule_thread = threading.Thread(target = self.refresh_schedule.run, daemon=True).start()
+
 
 
     def cleanup(self) -> None:
@@ -175,6 +184,7 @@ class FeedManager():
         """
         refresh all feeds in the database.
         """
+        print("refreshing.")
         feeds = self.get_feeds()
         for feed in feeds:
             data = feedutility.atom_parse(_download_xml(feed.uri))
@@ -182,7 +192,13 @@ class FeedManager():
             data.feed.db_id = feed.uri
             self._update_feed(data.feed)
             self._add_articles_to_database(_get_new_articles(data, feed), feed.db_id)
+    
+        
             
+    def scheduled_refresh(self) -> None:
+        self.refresh_all()
+        self.refresh_schedule.enter(self.settings.settings["refresh_time"], 1, self.scheduled_refresh)
+
 
 
     def delete_feed(self) -> None:
