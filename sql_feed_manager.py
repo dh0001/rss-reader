@@ -5,6 +5,7 @@ import feed as feedutility
 import sched
 import datetime
 import dateutil.parser
+import time
 from typing import List
 
 
@@ -16,10 +17,14 @@ class FeedManager():
         """
         self.settings = settings
         self.connection = sqlite3.connect(settings.settings["db_file"])
+        self.refresh_schedule = sched.scheduler(time.time, time.sleep)
+        self.refresh_schedule.enter(settings.settings["refresh_time"], 1, self.refresh_all)
+        self.refresh_schedule.run()
 
         if self.settings.settings["first-run"] == "true":
             self.create_tables()
             self.settings.settings["first-run"] == "false"
+
 
 
     def cleanup(self) -> None:
@@ -175,6 +180,7 @@ class FeedManager():
         """
         refresh all feeds in the database.
         """
+        print("refreshing.")
         feeds = self.get_feeds()
         for feed in feeds:
             data = feedutility.atom_parse(_download_xml(feed.uri))
