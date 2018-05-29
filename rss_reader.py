@@ -1,4 +1,3 @@
-
 # packages
 import sqlite3
 import requests
@@ -10,14 +9,15 @@ import settings as settings_class
 
 
 
-
-settings = settings_class.Settings("abc")
-
+# initialization
+settings = settings_class.Settings("settings.json")
 feed_manager = sql_feed_manager.FeedManager(settings)
+view = view_class.View(feed_manager, settings)
 
-view = view_class.View(feed_manager)
+# start program
+view.console_ui()
 
 
-feed_manager.create_tables()
-feed_manager.add_file_from_disk("Output.xml")
-view.std_output()
+# cleanup
+feed_manager.cleanup()
+settings.cleanup()
