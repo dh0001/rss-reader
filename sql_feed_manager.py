@@ -201,10 +201,14 @@ class FeedManager():
 
 
 
-    def delete_feed(self) -> None:
+    def delete_feed(self, id : int) -> None:
         """
         removes a feed from the database.
         """
+        c = self.connection.cursor()
+        c.execute('''DELETE FROM feeds WHERE rowid = ?''', [id])
+        c.execute('''DELETE FROM articles WHERE rowid = ?''', [id])
+        self.connection.commit()
         return
 
     

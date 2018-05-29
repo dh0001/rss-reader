@@ -39,8 +39,8 @@ class View():
         """
         Starts the UI in console mode.
         """
-        self.feeds_cache = self.feed_manager.get_feeds()
         while(1):
+            self.feeds_cache = self.feed_manager.get_feeds()
             self._std_output_feeds()
             command = input("> ")
             if (command.isdigit()):
@@ -49,7 +49,6 @@ class View():
                 input("continue > ")
             elif (command == "refresh"):
                 self.feed_manager.refresh_all()
-                self.feeds_cache = self.feed_manager.get_feeds()
             elif (command == "exit"):
                 return
             elif (command == "add"):
