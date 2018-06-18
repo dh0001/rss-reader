@@ -1,8 +1,9 @@
 import feed
 import sql_feed_manager
 import settings
+import struct
 
-from tkinter import *
+from tkinter import *  # pylint: disable=unused-import
 from tkinter import ttk
 
 from typing import List
@@ -88,8 +89,11 @@ class View():
         ttk.Button(buttons_frame, text="Delete", command=self.button_delete).grid(column=2, row=0)
         ttk.Button(buttons_frame, text="Reload", command=self.button_reload).grid(column=3, row=0)
 
-        self.feed_view = ttk.Treeview(mainframe)
+        self.feed_view = ttk.Treeview(mainframe, columns=('id'))
         self.feed_view.grid(column=0, row=1, rowspan=2, sticky=(N, S, E, W))
+        self.feed_view.bind("<<TreeviewSelect>>", lambda e: self.tk_output_articles())
+        self.feed_view.heading('#0', text="Feed")
+        self.feed_view["displaycolumns"]=[]
 
         self.content_view = Text(mainframe)
         self.content_view.grid(column=1, row=2, sticky=(N, S, E, W))
@@ -130,9 +134,17 @@ class View():
 
     def button_add(self) -> None:
         """
-        Called when the refresh button is pressed.
+        Called when the add button is pressed.
         """
-        return
+        def submit() -> None:
+            self.feed_manager.add_feed_from_web(add_entry.get())
+            t.destroy()
+        t = Toplevel()
+        t.title("Add Feed")
+        add_entry = ttk.Entry(t)
+        add_entry.grid(column=0, row=0, sticky=(E, W))
+        ttk.Button(t, text="Add Feed", command=submit).grid(column=0, row=1, sticky=(E, W))
+
 
     def button_delete(self) -> None:
         """
@@ -142,25 +154,19 @@ class View():
 
     def button_reload(self) -> None:
         """
-        Called when the refresh button is pressed.
+        Called when the reload button is pressed.
         """
         self.feed_view.delete(*self.feed_view.get_children())
 
         for feed in self.feeds_cache:
-            self.feed_view.insert('', 'end', text=feed.title)
-        return
+            self.feed_view.insert('', 'end', text=feed.title, values=[feed.db_id])
 
-    def _tk_tree_output_feeds(self) -> None:
+    def tk_output_articles(self) -> None:
         """
-        Outputs contents of feeds_cache.
+        Gets highlighted feeds in feeds_display, then outputs the articles from those feeds into the articles_display.
         """
-        for feed in self.feeds_cache:
-            print ("Feed: ", feed.title)
-            print ("Last Updated: ", feed.updated)
+        self.article_view.delete(*self.article_view.get_children())
+        self.articles_cache = self.feed_manager.get_articles(self.feed_view.item(self.feed_view.focus())['values'][0])
 
-    def _tk_tree_output_articles(self) -> None:
-        """
-        Output contents of articles_cache.
-        """
         for article in self.articles_cache:
-            print ("Article: ", article.title)
+            self.article_view.insert('', 'end', text=article.title, values=[article.author, article.updated])
