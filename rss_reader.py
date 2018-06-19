@@ -14,6 +14,7 @@ settings = settings_class.Settings("settings.json")
 feed_manager = sql_feed_manager.FeedManager(settings)
 view = view_class.View(feed_manager, settings)
 
+
 # start program
 view.gui()
 
