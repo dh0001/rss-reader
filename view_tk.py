@@ -3,7 +3,7 @@ import sql_feed_manager
 import settings
 import struct
 
-from tkinter import *  # pylint: disable=unused-import
+import tkinter as tk  # pylint: disable=unused-import
 from tkinter import ttk
 
 from typing import List
@@ -21,10 +21,10 @@ class View():
 
         self.feeds_cache : List[feed.WebFeed]
         self.articles_cache : List[feed.Article]
-        self.window : Tk
+        self.window : tk.Tk
         self.article_view : ttk.Treeview
         self.feed_view : ttk.Treeview
-        self.content_view : Text
+        self.content_view : tk.Text
 
 
 
@@ -76,14 +76,14 @@ class View():
         """
         
         # Root
-        root = Tk()
+        root = tk.Tk()
         root.title("RSS Reader")
         root.columnconfigure(0, weight=1)
         root.rowconfigure(0, weight=1)
 
         # Root's Frame
         main_frame = ttk.Frame(root, padding="0 0 0 0")
-        main_frame.grid(column=0, row=0, sticky=(N, W, E, S))
+        main_frame.grid(column=0, row=0, sticky=(tk.N, tk.W, tk.E, tk.S))
         main_frame.columnconfigure(0, weight=1)
         main_frame.rowconfigure(0, weight=1)
         main_frame.columnconfigure(0, weight=1)
@@ -94,7 +94,7 @@ class View():
 
         # Buttons
         buttons_frame = ttk.Frame(main_frame)
-        buttons_frame.grid(column=0, row=0, columnspan=2, sticky=(N, S, E, W))
+        buttons_frame.grid(column=0, row=0, columnspan=2, sticky=(tk.N, tk.S, tk.E, tk.W))
         ttk.Button(buttons_frame, text="Refresh", command=self.button_refresh).grid(column=0, row=0)
         ttk.Button(buttons_frame, text="Add", command=self.button_add).grid(column=1, row=0)
         ttk.Button(buttons_frame, text="Delete", command=self.button_delete).grid(column=2, row=0)
@@ -106,14 +106,14 @@ class View():
 
         # Feed View
         self.feed_view = ttk.Treeview(main_frame, columns=('id'))
-        self.feed_view.grid(column=0, row=1, rowspan=2, sticky=(N, S, E, W))
+        self.feed_view.grid(column=0, row=1, rowspan=2, sticky=(tk.N, tk.S, tk.E, tk.W))
         self.feed_view.bind("<<TreeviewSelect>>", lambda e: self.tk_output_articles())
         self.feed_view.heading('#0', text="Feed")
         self.feed_view["displaycolumns"]=[]
 
         # Article View
         self.article_view = ttk.Treeview(main_frame, columns=('author', 'updated'))
-        self.article_view.grid(column=1, row=1, sticky=(N, S, E, W))
+        self.article_view.grid(column=1, row=1, sticky=(tk.N, tk.S, tk.E, tk.W))
         self.article_view.heading('#0', text='Article')
         self.article_view.column('#0', minwidth=30)
         self.article_view.heading('author', text='Author')
@@ -123,8 +123,8 @@ class View():
         self.article_view.bind("<<TreeviewSelect>>", lambda e: self.tk_output_content())
 
         # Content View
-        self.content_view = Text(main_frame)
-        self.content_view.grid(column=1, row=2, sticky=(N, S, E, W))
+        self.content_view = tk.Text(main_frame)
+        self.content_view.grid(column=1, row=2, sticky=(tk.N, tk.S, tk.E, tk.W))
 
         self.button_refresh()
         self.button_reload()
@@ -146,11 +146,11 @@ class View():
         def submit() -> None:
             self.feed_manager.add_feed_from_web(add_entry.get())
             t.destroy()
-        t = Toplevel()
+        t = tk.Toplevel()
         t.title("Add Feed")
         add_entry = ttk.Entry(t)
-        add_entry.grid(column=0, row=0, sticky=(E, W))
-        ttk.Button(t, text="Add Feed", command=submit).grid(column=0, row=1, sticky=(E, W))
+        add_entry.grid(column=0, row=0, sticky=(tk.E, tk.W))
+        ttk.Button(t, text="Add Feed", command=submit).grid(column=0, row=1, sticky=(tk.E, tk.W))
 
 
     def button_delete(self) -> None:
@@ -160,11 +160,11 @@ class View():
         def submit() -> None:
             self.feed_manager.delete_feed(add_entry.get())
             t.destroy()
-        t = Toplevel()
+        t = tk.Toplevel()
         t.title("Delete Feed")
         add_entry = ttk.Entry(t)
-        add_entry.grid(column=0, row=0, sticky=(E, W))
-        ttk.Button(t, text="Delete Feed", command=submit).grid(column=0, row=1, sticky=(E, W))
+        add_entry.grid(column=0, row=0, sticky=(tk.E, tk.W))
+        ttk.Button(t, text="Delete Feed", command=submit).grid(column=0, row=1, sticky=(tk.E, tk.W))
         return
 
     def button_reload(self) -> None:
