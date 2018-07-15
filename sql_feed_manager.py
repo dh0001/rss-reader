@@ -30,8 +30,6 @@ class FeedManager():
         self.refresh_schedule_thread = threading.Thread(target = self.refresh_schedule.run, daemon=True).start()
 
 
-
-
     def cleanup(self) -> None:
         """
         Should be called before program exit.
@@ -77,14 +75,14 @@ class FeedManager():
         return c.lastrowid
 
 
-    def _add_articles_to_database(self, articles, id) -> None:
+    def _add_articles_to_database(self, articles: List[feedutility.Article], feed_id: int) -> None:
         """
         Add multiple articles to database. articles should be a list.
         """
         c = self.connection.cursor()
         entries = []
         for article in articles:
-            entries.append((id, article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published))
+            entries.append((feed_id, article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published))
         c.executemany('''INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', entries)
         self.connection.commit()
 
@@ -153,7 +151,7 @@ class FeedManager():
         self._add_atom_file(data, file)
 
 
-    def get_feeds(self) -> List[feedutility.WebFeed]:
+    def get_all_feeds(self) -> List[feedutility.WebFeed]:
         """
         returns all the feeds in the database.
         """
@@ -183,16 +181,16 @@ class FeedManager():
 
     def refresh_all(self) -> None:
         """
-        refresh all feeds in the database.
+        Downloads a copy of every feed and updates the database using them.
         """
         print("refreshing.")
-        feeds = self.get_feeds()
+        feeds = self.get_all_feeds()
         for feed in feeds:
-            data = feedutility.atom_parse(_download_xml(feed.uri))
-            data.feed.db_id = feed.db_id
-            data.feed.db_id = feed.uri
-            self._update_feed(data.feed)
-            self._add_articles_to_database(_get_new_articles(data, feed), feed.db_id)
+            new_feed_data = feedutility.atom_parse(_download_xml(feed.uri))
+            new_feed_data.feed.db_id = feed.db_id
+            new_feed_data.feed.uri = feed.uri
+            self._update_feed(new_feed_data.feed)
+            self._add_articles_to_database(_get_new_articles(new_feed_data, feed), feed.db_id)
     
         
             
@@ -202,7 +200,7 @@ class FeedManager():
 
 
 
-    def delete_feed(self, id : int) -> None:
+    def delete_feed(self, id: int) -> None:
         """
         removes a feed from the database.
         """
@@ -237,7 +235,7 @@ def write_string_to_file(str) -> None:
     text_file.write(str)
     return
 
-def load_rss_from_disk(f) -> str:
+def load_rss_from_disk(f: str) -> str:
     """
     Returns content in file "f".
     """

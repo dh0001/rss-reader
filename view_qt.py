@@ -22,6 +22,7 @@ class View():
         self.settings_manager = settings
 
         self.feeds_cache : List[feed.WebFeed]
+        self.feeds_cache = self.feed_manager.get_all_feeds()
         self.articles_cache : List[feed.Article]
 
         self.main_widget : qtw.QWidget
@@ -47,11 +48,7 @@ class View():
         main_window.setCentralWidget(self.main_widget)
 
         self.feed_model = qtg.QStandardItemModel()
-        self.feed_model.setColumnCount(1)
-        self.feed_model.setHorizontalHeaderLabels(['Feed Name'])
         self.article_model = qtg.QStandardItemModel()
-        self.article_model.setColumnCount(3)
-        self.article_model.setHorizontalHeaderLabels(['Article', 'Author', 'Updated'])    
 
         self.feed_view = qtw.QTreeView()
         self.feed_view.setModel(self.feed_model)
@@ -60,6 +57,9 @@ class View():
         self.article_view.setModel(self.article_model)
         self.article_view.setRootIsDecorated(False)
         self.content_view = qtw.QTextBrowser()
+        self.content_view.setOpenExternalLinks(True)
+
+        self.button_reload()
 
         self.feed_view.selectionModel().selectionChanged.connect(self.output_articles)
         self.article_view.selectionModel().selectionChanged.connect(self.output_content)
@@ -93,7 +93,7 @@ class View():
         Called when the refresh button is pressed.
         """
         self.feed_manager.refresh_all()
-        self.feeds_cache = self.feed_manager.get_feeds()
+        self.feeds_cache = self.feed_manager.get_all_feeds()
         self.button_reload()
         return
 
@@ -118,9 +118,9 @@ class View():
         then repopulates the feed view.
         """
         self.feed_model.clear()
-        self.article_model.clear()
         self.feed_model.setColumnCount(1)
         self.feed_model.setHorizontalHeaderLabels(['Feed Name'])
+        self.article_model.clear()
         self.article_model.setColumnCount(3)
         self.article_model.setHorizontalHeaderLabels(['Article', 'Author', 'Updated'])
 
@@ -159,6 +159,6 @@ class View():
 
 
 class DbItem(qtg.QStandardItem):
-    def __init__(self, text, feed_id):
+    def __init__(self, text: str, feed_id: int):
         qtg.QStandardItem.__init__(self, text)
         self.feed_id = feed_id
