@@ -206,7 +206,7 @@ class FeedManager():
         """
         c = self.connection.cursor()
         c.execute('''DELETE FROM feeds WHERE rowid = ?''', [id])
-        c.execute('''DELETE FROM articles WHERE rowid = ?''', [id])
+        c.execute('''DELETE FROM articles WHERE feed_id = ?''', [id])
         self.connection.commit()
         return
 

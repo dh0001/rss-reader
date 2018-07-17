@@ -53,6 +53,8 @@ class View():
         self.feed_view = qtw.QTreeView()
         self.feed_view.setModel(self.feed_model)
         self.feed_view.setRootIsDecorated(False)
+        self.feed_view.setContextMenuPolicy(qtc.Qt.CustomContextMenu)
+        self.feed_view.customContextMenuRequested.connect(self.feed_context_menu)
         self.article_view = qtw.QTreeView()
         self.article_view.setModel(self.article_model)
         self.article_view.setRootIsDecorated(False)
@@ -78,7 +80,6 @@ class View():
 
         menu_bar = main_window.menuBar().addMenu('Options')
         menu_bar.addAction("Add Feed...").triggered.connect(self.button_add)
-        menu_bar.addAction("Remove Feed...").triggered.connect(self.button_delete)
         menu_bar.addAction("Download Feeds").triggered.connect(self.button_refresh)
         menu_bar.addAction("Reload Screen").triggered.connect(self.button_reload)
         menu_bar.addSeparator()
@@ -95,21 +96,27 @@ class View():
         self.feed_manager.refresh_all()
         self.feeds_cache = self.feed_manager.get_all_feeds()
         self.button_reload()
-        return
 
 
     def button_add(self) -> None:
         """
         Called when the add button is pressed.
         """
-        return
+        inputDialog = qtw.QInputDialog(None, qtc.Qt.WindowSystemMenuHint | qtc.Qt.WindowTitleHint)
+        inputDialog.setWindowTitle("Add Feed")
+        inputDialog.setLabelText("Feed Url:")
+        inputDialog.show()
+        if (inputDialog.exec_() == qtw.QDialog.Accepted):
+            self.feed_manager.add_feed_from_web(inputDialog.textValue())
+            self.button_reload()
 
 
-    def button_delete(self) -> None:
+    def button_delete(self, db_id: int) -> None:
         """
-        Called when the refresh button is pressed.
+        Called when the delete button is pressed.
         """
-        return
+        self.feed_manager.delete_feed(db_id)
+        self.button_reload()
 
 
     def button_reload(self) -> None:
@@ -123,6 +130,8 @@ class View():
         self.article_model.clear()
         self.article_model.setColumnCount(3)
         self.article_model.setHorizontalHeaderLabels(['Article', 'Author', 'Updated'])
+        self.content_view.setHtml("")
+        self.feeds_cache = self.feed_manager.get_all_feeds()
 
         for feed in self.feeds_cache:
             title = DbItem(feed.title, feed.db_id)
@@ -156,6 +165,20 @@ class View():
         """
         article = self.article_model.item(self.article_view.currentIndex().row(), 0).text()
         self.content_view.setHtml(next(x for x in self.articles_cache if x.title == article).content)
+
+    def feed_context_menu(self, position) -> None:
+        """
+        Outputs the context menu for items in the feed view.
+        """
+        index = self.feed_view.indexAt(position)
+        
+        if index.isValid():
+            menu = qtw.QMenu()
+            delete_action = menu.addAction("Delete Feed")
+            action = menu.exec_(self.feed_view.viewport().mapToGlobal(position))
+
+            if action == delete_action:
+                self.button_delete(self.feed_model.itemFromIndex(index).feed_id)
 
 
 class DbItem(qtg.QStandardItem):
