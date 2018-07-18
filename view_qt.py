@@ -37,6 +37,10 @@ class View():
         self.article_model : qtg.QStandardItemModel
 
 
+    def cleanup(self) -> None:
+        self.main_widget.saveGeometry()
+
+
     def gui(self) -> None:
         """
         Starts the UI in graphical mode using qt. Initializes the window, views, and models.
@@ -179,16 +183,6 @@ class View():
             self.article_model.appendRow([title, author, updated])
 
 
-    def mark_article_read(self, row: int, article_id: int) -> None:
-        """
-        Tells the feed manager to mark as read in the db and remove BoldRole from the row.
-        """
-        self.feed_manager.set_article_unread_status(article_id, False)
-        self.article_model.item(row, 0).setData(False, UnreadRole)
-        self.article_model.item(row, 1).setData(False, UnreadRole)
-        self.article_model.item(row, 2).setData(False, UnreadRole)
-
-
     def output_content(self) -> None:
         """
         Gets highlighted article in article_display, then outputs the content into content_display.
@@ -197,6 +191,16 @@ class View():
         article_db_id = self.article_model.item(row, 0).data(DbRole)
         self.content_view.setHtml(next(x for x in self.articles_cache if x.db_id == article_db_id).content)
         self.mark_article_read(row, article_db_id)
+
+
+    def mark_article_read(self, row: int, article_id: int) -> None:
+        """
+        Tells the feed manager to mark as read in the db and remove BoldRole from the row.
+        """
+        self.feed_manager.set_article_unread_status(article_id, False)
+        self.article_model.item(row, 0).setData(False, UnreadRole)
+        self.article_model.item(row, 1).setData(False, UnreadRole)
+        self.article_model.item(row, 2).setData(False, UnreadRole)
 
 
     def feed_context_menu(self, position) -> None:
@@ -212,6 +216,12 @@ class View():
 
             if action == delete_action:
                 self.button_delete(self.feed_model.itemFromIndex(index).data(DbRole))
+
+
+    def add_new_data(self) -> None:
+        """
+        Recieves new feed data from the feed manager and adds them to the views.
+        """
 
 
 # class ArticleModel(qtc.QAbstractItemModel):
