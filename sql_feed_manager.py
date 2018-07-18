@@ -65,48 +65,6 @@ class FeedManager():
         self.connection.commit()
 
 
-    def _add_feed_to_database(self, feed:feedutility.WebFeed) -> int:
-        """
-        Add a feed entry into the database. Returns the row id of the inserted entry.
-        """
-        c = self.connection.cursor()
-        c.execute('''INSERT INTO feeds VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
-            [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.subtitle, feed.feed_meta])
-        self.connection.commit()
-        return c.lastrowid
-
-
-    def _add_articles_to_database(self, articles: List[feedutility.Article], feed_id: int) -> None:
-        """
-        Add multiple articles to database. articles should be a list.
-        """
-        c = self.connection.cursor()
-        entries = []
-        for article in articles:
-            entries.append((feed_id, article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published, 1))
-        c.executemany('''INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', entries)
-        self.connection.commit()
-
-
-    def _read_feeds_from_database(self) -> List[feedutility.WebFeed]:
-        """
-        Returns a list containing all the feeds in the database.
-        """
-        c = self.connection.cursor()
-        feeds = []
-        for feed in c.execute('''SELECT rowid, * FROM feeds'''):
-            new_feed = feedutility.WebFeed()
-            new_feed.db_id = feed[0]
-            new_feed.uri = feed[1]
-            new_feed.title = feed[2]
-            new_feed.author = feed[3]
-            new_feed.author_uri = feed[4]
-            new_feed.category = feed[5]
-            new_feed.updated = feed[6]
-            feeds.append(new_feed)
-        return feeds
-
-
     def get_articles(self, feed_id: int) -> List[feedutility.Article]:
         """
         Returns a list containing all the articles with feed_id "id".
@@ -158,31 +116,26 @@ class FeedManager():
 
     def get_all_feeds(self) -> List[feedutility.WebFeed]:
         """
-        returns all the feeds in the database.
-        """
-        return self._read_feeds_from_database()
-
-
-    def _update_feed(self, feed: feedutility.WebFeed) -> None:
-        """
-        Update the corresponding feed in the database. Uses db_id to find the database entry.
+        Returns a list containing all the feeds in the database.
         """
         c = self.connection.cursor()
-        c.execute('''UPDATE feeds SET
-        uri = ?,
-        title = ?,
-        author = ?,
-        author_uri = ?,
-        category = ?,
-        updated = ?,
-        icon_uri = ?,
-        subtitle = ?,
-        feed_meta = ? 
-        WHERE rowid = ?''', 
-        [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.subtitle, feed.feed_meta, feed.db_id])
-        self.connection.commit()
-        return
+        feeds = []
+        for feed in c.execute('''SELECT rowid, * FROM feeds'''):
+            new_feed = feedutility.WebFeed()
+            new_feed.db_id = feed[0]
+            new_feed.uri = feed[1]
+            new_feed.title = feed[2]
+            new_feed.author = feed[3]
+            new_feed.author_uri = feed[4]
+            new_feed.category = feed[5]
+            new_feed.updated = feed[6]
+            feeds.append(new_feed)
+        return feeds
 
+
+    def get_unread_articles_count(self, feed_id: int) -> int:
+        return self.connection.cursor().execute('''SELECT count(*) FROM articles WHERE unread = 1 AND feed_id = ?''', [feed_id]).fetchone()[0]
+    
 
     def refresh_all(self) -> None:
         """
@@ -213,13 +166,57 @@ class FeedManager():
         self.connection.commit()
 
 
-    def mark_article_read(self, article_id: int) -> None:
+    def set_article_unread_status(self, article_id: int, status: bool) -> None:
         """
-        Marks the article read in the database.
+        Changes the unread column in the database for passed article_id.
         """
         c = self.connection.cursor()
-        c.execute('''UPDATE articles SET unread = 0 WHERE rowid = ?''', [article_id])
+        c.execute('''UPDATE articles SET unread = ? WHERE rowid = ?''', [status, article_id])
         self.connection.commit()
+
+
+    def _add_feed_to_database(self, feed:feedutility.WebFeed) -> int:
+        """
+        Add a feed entry into the database. Returns the row id of the inserted entry.
+        """
+        c = self.connection.cursor()
+        c.execute('''INSERT INTO feeds VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
+            [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.subtitle, feed.feed_meta])
+        self.connection.commit()
+        return c.lastrowid
+
+
+    def _add_articles_to_database(self, articles: List[feedutility.Article], feed_id: int) -> None:
+        """
+        Add multiple articles to database. articles should be a list.
+        """
+        c = self.connection.cursor()
+        entries = []
+        for article in articles:
+            entries.append((feed_id, article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published, 1))
+        c.executemany('''INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', entries)
+        self.connection.commit()
+
+
+    def _update_feed(self, feed: feedutility.WebFeed) -> None:
+        """
+        Update the corresponding feed in the database. Uses db_id to find the database entry.
+        """
+        c = self.connection.cursor()
+        c.execute('''UPDATE feeds SET
+        uri = ?,
+        title = ?,
+        author = ?,
+        author_uri = ?,
+        category = ?,
+        updated = ?,
+        icon_uri = ?,
+        subtitle = ?,
+        feed_meta = ? 
+        WHERE rowid = ?''', 
+        [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.subtitle, feed.feed_meta, feed.db_id])
+        self.connection.commit()
+        return
 
     
 def _get_new_articles(cf: feedutility.CompleteFeed, f: feedutility.WebFeed) -> List[feedutility.Article]:
@@ -233,10 +230,11 @@ def _get_new_articles(cf: feedutility.CompleteFeed, f: feedutility.WebFeed) -> L
 
 def _download_xml(uri) -> any:
     """
-    HTTP GET request for file, with headers indicating application.
+    Downloads file indicated by 'uri' using requests library, with a User-Agent header.
     """
     headers = {'User-Agent' : 'python-rss-reader-side-project'}
     return defusxml.fromstring(requests.get(uri, headers=headers).text)
+
 
 def write_string_to_file(str) -> None:
     """
@@ -245,6 +243,7 @@ def write_string_to_file(str) -> None:
     text_file = open("Output.xml", "w", encoding="utf-8")
     text_file.write(str)
     return
+
 
 def load_rss_from_disk(f: str) -> str:
     """

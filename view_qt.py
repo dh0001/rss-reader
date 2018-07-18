@@ -11,7 +11,7 @@ import PyQt5.QtGui as qtg
 
 from typing import List
 
-BoldRole = qtc.Qt.UserRole + 1
+UnreadRole = qtc.Qt.UserRole + 1
 DbRole = qtc.Qt.UserRole + 2
 
 class View():
@@ -129,18 +129,29 @@ class View():
         """
         self.feed_model.clear()
         self.feed_model.setColumnCount(1)
-        self.feed_model.setHorizontalHeaderLabels(['Feed Name'])
+        self.feed_model.setHorizontalHeaderLabels(['Feed Name', 'Unread'])
         self.article_model.clear()
         self.article_model.setColumnCount(3)
         self.article_model.setHorizontalHeaderLabels(['Article', 'Author', 'Updated'])
         self.content_view.setHtml("")
+        self.output_feeds()
+
+
+
+    def output_feeds(self) -> None:
+        """
+        Populates the feed view.
+        """
         self.feeds_cache = self.feed_manager.get_all_feeds()
 
         for feed in self.feeds_cache:
             title = qtg.QStandardItem(feed.title)
             title.setData(feed.db_id, DbRole)
             title.setEditable(False)
-            self.feed_model.appendRow([title])
+            unread_count = qtg.QStandardItem(str(self.feed_manager.get_unread_articles_count(feed.db_id)))
+            unread_count.setData(feed.db_id, DbRole)
+            unread_count.setEditable(False)
+            self.feed_model.appendRow([title, unread_count])
 
 
     def output_articles(self) -> None:
@@ -157,13 +168,13 @@ class View():
         for article in self.articles_cache:
             title = qtg.QStandardItem(article.title)
             title.setData(article.db_id, DbRole)
-            title.setData(article.unread, BoldRole)
+            title.setData(article.unread, UnreadRole)
             title.setEditable(False)
             author = qtg.QStandardItem(article.author)
-            author.setData(article.unread, BoldRole)
+            author.setData(article.unread, UnreadRole)
             author.setEditable(False)
             updated = qtg.QStandardItem(article.updated)
-            updated.setData(article.unread, BoldRole)
+            updated.setData(article.unread, UnreadRole)
             updated.setEditable(False)
             self.article_model.appendRow([title, author, updated])
 
@@ -172,10 +183,10 @@ class View():
         """
         Tells the feed manager to mark as read in the db and remove BoldRole from the row.
         """
-        self.feed_manager.mark_article_read(article_id)
-        self.article_model.item(row, 0).setData(False, BoldRole)
-        self.article_model.item(row, 1).setData(False, BoldRole)
-        self.article_model.item(row, 2).setData(False, BoldRole)
+        self.feed_manager.set_article_unread_status(article_id, False)
+        self.article_model.item(row, 0).setData(False, UnreadRole)
+        self.article_model.item(row, 1).setData(False, UnreadRole)
+        self.article_model.item(row, 2).setData(False, UnreadRole)
 
 
     def output_content(self) -> None:
@@ -203,26 +214,26 @@ class View():
                 self.button_delete(self.feed_model.itemFromIndex(index).data(DbRole))
 
 
-class ArticleModel(qtc.QAbstractItemModel):
-    def __init__(self, in_nodes):
-        qtc.QAbstractItemModel.__init__(self)
-        self._root = DbItem(None, 0)
+# class ArticleModel(qtc.QAbstractItemModel):
+#     def __init__(self, in_nodes):
+#         qtc.QAbstractItemModel.__init__(self)
+#         self._root = DbItem(None, 0)
 
 
-class DbItem(qtg.QStandardItem):
-    def __init__(self, text: str, db_id: int):
-        qtg.QStandardItem.__init__(self, text)
-        self.db_id : int = db_id
-        self.unread : bool = True
+# class DbItem(qtg.QStandardItem):
+#     def __init__(self, text: str, db_id: int):
+#         qtg.QStandardItem.__init__(self, text)
+#         self.db_id : int = db_id
+#         self.unread : bool = True
 
-    def data(self, role):
-        if role == BoldRole:
-            return self.unread
-        return qtg.QStandardItem.data(self, role)
+#     def data(self, role):
+#         if role == UnreadRole:
+#             return self.unread
+#         return qtg.QStandardItem.data(self, role)
 
 
 class BoldDelegate(qtw.QStyledItemDelegate):
     def paint(self, painter, option, index):
         # decide here if item should be bold and set font weight to bold if needed
-        option.font.setBold(index.data(BoldRole))
+        option.font.setBold(index.data(UnreadRole))
         qtw.QStyledItemDelegate.paint(self, painter, option, index)
