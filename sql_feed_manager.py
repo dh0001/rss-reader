@@ -60,7 +60,8 @@ class FeedManager():
             author TEXT,
             author_uri TEXT,
             content TEXT,
-            published INTEGER)''')
+            published INTEGER,
+            unread INTEGER)''')
         self.connection.commit()
 
 
@@ -82,8 +83,8 @@ class FeedManager():
         c = self.connection.cursor()
         entries = []
         for article in articles:
-            entries.append((feed_id, article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published))
-        c.executemany('''INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', entries)
+            entries.append((feed_id, article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published, 1))
+        c.executemany('''INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', entries)
         self.connection.commit()
 
 
@@ -106,20 +107,24 @@ class FeedManager():
         return feeds
 
 
-    def get_articles(self, id) -> List[feedutility.Article]:
+    def get_articles(self, feed_id: int) -> List[feedutility.Article]:
         """
         Returns a list containing all the articles with feed_id "id".
         """
         c = self.connection.cursor()
         articles = []
-        for article in c.execute('''SELECT * FROM articles WHERE feed_id = ?''', [id]):
-            new_article = feedutility.Article()
-            new_article.title = article[2]
-            new_article.updated = article[3]
-            new_article.author = article[4]
-            new_article.author_uri = article[5]
-            new_article.content = article[6]
-            articles.append(new_article)
+        for article in c.execute('''SELECT rowid, * FROM articles WHERE feed_id = ?''', [feed_id]):
+            return_article = feedutility.Article()
+            return_article.db_id = article[0]
+            return_article.feed_id = article[1]
+            return_article.uri = article[2]
+            return_article.title = article[3]
+            return_article.updated = article[4]
+            return_article.author = article[5]
+            return_article.author_uri = article[6]
+            return_article.content = article[7]
+            return_article.unread = article[9]
+            articles.append(return_article)
         return articles
 
 
@@ -131,8 +136,8 @@ class FeedManager():
         new_articles = output.articles
         new_feed = output.feed
         new_feed.uri = location
-        id = self._add_feed_to_database(new_feed)
-        self._add_articles_to_database(new_articles, id)
+        row_id = self._add_feed_to_database(new_feed)
+        self._add_articles_to_database(new_articles, row_id)
 
 
     def add_file_from_disk(self, location) -> None:
@@ -191,7 +196,6 @@ class FeedManager():
             new_feed_data.feed.uri = feed.uri
             self._update_feed(new_feed_data.feed)
             self._add_articles_to_database(_get_new_articles(new_feed_data, feed), feed.db_id)
-    
         
             
     def scheduled_refresh(self) -> None:
@@ -199,16 +203,23 @@ class FeedManager():
         self.refresh_schedule.enter(self.settings.settings["refresh_time"], 1, self.scheduled_refresh)
 
 
-
-    def delete_feed(self, id: int) -> None:
+    def delete_feed(self, feed_id: int) -> None:
         """
-        removes a feed from the database.
+        removes a feed and its articles from the database.
         """
         c = self.connection.cursor()
-        c.execute('''DELETE FROM feeds WHERE rowid = ?''', [id])
-        c.execute('''DELETE FROM articles WHERE feed_id = ?''', [id])
+        c.execute('''DELETE FROM feeds WHERE rowid = ?''', [feed_id])
+        c.execute('''DELETE FROM articles WHERE feed_id = ?''', [feed_id])
         self.connection.commit()
-        return
+
+
+    def mark_article_read(self, article_id: int) -> None:
+        """
+        Marks the article read in the database.
+        """
+        c = self.connection.cursor()
+        c.execute('''UPDATE articles SET unread = 0 WHERE rowid = ?''', [article_id])
+        self.connection.commit()
 
     
 def _get_new_articles(cf: feedutility.CompleteFeed, f: feedutility.WebFeed) -> List[feedutility.Article]:

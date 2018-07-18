@@ -11,6 +11,9 @@ import PyQt5.QtGui as qtg
 
 from typing import List
 
+BoldRole = qtc.Qt.UserRole + 1
+DbRole = qtc.Qt.UserRole + 2
+
 class View():
 
     def __init__(self, feed_mgr:sql_feed_manager.FeedManager, settings:settings.Settings):
@@ -58,10 +61,11 @@ class View():
         self.article_view = qtw.QTreeView()
         self.article_view.setModel(self.article_model)
         self.article_view.setRootIsDecorated(False)
+        self.article_view.setItemDelegate(BoldDelegate())
         self.content_view = qtw.QTextBrowser()
         self.content_view.setOpenExternalLinks(True)
 
-        self.button_reload()
+        self.reset_screen()
 
         self.feed_view.selectionModel().selectionChanged.connect(self.output_articles)
         self.article_view.selectionModel().selectionChanged.connect(self.output_content)
@@ -79,9 +83,9 @@ class View():
         self.main_widget.setLayout(hbox)        
 
         menu_bar = main_window.menuBar().addMenu('Options')
-        menu_bar.addAction("Add Feed...").triggered.connect(self.button_add)
+        menu_bar.addAction("Add Feed...").triggered.connect(self.button_add_feed)
         menu_bar.addAction("Download Feeds").triggered.connect(self.button_refresh)
-        menu_bar.addAction("Reload Screen").triggered.connect(self.button_reload)
+        menu_bar.addAction("Reload Screen").triggered.connect(self.reset_screen)
         menu_bar.addSeparator()
         menu_bar.addAction("Exit").triggered.connect(qtc.QCoreApplication.quit)
 
@@ -91,16 +95,16 @@ class View():
 
     def button_refresh(self) -> None:
         """
-        Called when the refresh button is pressed.
+        Called when a refresh button is pressed. Tells the feed manager to update the feeds.
         """
         self.feed_manager.refresh_all()
         self.feeds_cache = self.feed_manager.get_all_feeds()
-        self.button_reload()
+        self.reset_screen()
 
 
-    def button_add(self) -> None:
+    def button_add_feed(self) -> None:
         """
-        Called when the add button is pressed.
+        Called when the add feed button is pressed.
         """
         inputDialog = qtw.QInputDialog(None, qtc.Qt.WindowSystemMenuHint | qtc.Qt.WindowTitleHint)
         inputDialog.setWindowTitle("Add Feed")
@@ -108,7 +112,7 @@ class View():
         inputDialog.show()
         if (inputDialog.exec_() == qtw.QDialog.Accepted):
             self.feed_manager.add_feed_from_web(inputDialog.textValue())
-            self.button_reload()
+            self.reset_screen()
 
 
     def button_delete(self, db_id: int) -> None:
@@ -116,13 +120,12 @@ class View():
         Called when the delete button is pressed.
         """
         self.feed_manager.delete_feed(db_id)
-        self.button_reload()
+        self.reset_screen()
 
 
-    def button_reload(self) -> None:
+    def reset_screen(self) -> None:
         """
-        Called when the reload button is pressed. Deletes everything in the article, feed, and content view,
-        then repopulates the feed view.
+        Deletes everything in the article, feed, and content view, then repopulates the feed view.
         """
         self.feed_model.clear()
         self.feed_model.setColumnCount(1)
@@ -134,7 +137,8 @@ class View():
         self.feeds_cache = self.feed_manager.get_all_feeds()
 
         for feed in self.feeds_cache:
-            title = DbItem(feed.title, feed.db_id)
+            title = qtg.QStandardItem(feed.title)
+            title.setData(feed.db_id, DbRole)
             title.setEditable(False)
             self.feed_model.appendRow([title])
 
@@ -145,26 +149,44 @@ class View():
         """
         self.article_model.clear()
         self.article_model.setColumnCount(3)
-        self.article_model.setHorizontalHeaderLabels(['Article', 'Author', 'Updated'])    
-        db_id = self.feed_model.itemFromIndex(self.feed_view.currentIndex()).feed_id
+        self.article_model.setHorizontalHeaderLabels(['Article', 'Author', 'Updated'])
+
+        db_id = self.feed_view.currentIndex().data(DbRole)
         self.articles_cache = self.feed_manager.get_articles(db_id)
 
         for article in self.articles_cache:
             title = qtg.QStandardItem(article.title)
+            title.setData(article.db_id, DbRole)
+            title.setData(article.unread, BoldRole)
             title.setEditable(False)
             author = qtg.QStandardItem(article.author)
+            author.setData(article.unread, BoldRole)
             author.setEditable(False)
             updated = qtg.QStandardItem(article.updated)
+            updated.setData(article.unread, BoldRole)
             updated.setEditable(False)
             self.article_model.appendRow([title, author, updated])
+
+
+    def mark_article_read(self, row: int, article_id: int) -> None:
+        """
+        Tells the feed manager to mark as read in the db and remove BoldRole from the row.
+        """
+        self.feed_manager.mark_article_read(article_id)
+        self.article_model.item(row, 0).setData(False, BoldRole)
+        self.article_model.item(row, 1).setData(False, BoldRole)
+        self.article_model.item(row, 2).setData(False, BoldRole)
 
 
     def output_content(self) -> None:
         """
         Gets highlighted article in article_display, then outputs the content into content_display.
         """
-        article = self.article_model.item(self.article_view.currentIndex().row(), 0).text()
-        self.content_view.setHtml(next(x for x in self.articles_cache if x.title == article).content)
+        row = self.article_view.currentIndex().row()
+        article_db_id = self.article_model.item(row, 0).data(DbRole)
+        self.content_view.setHtml(next(x for x in self.articles_cache if x.db_id == article_db_id).content)
+        self.mark_article_read(row, article_db_id)
+
 
     def feed_context_menu(self, position) -> None:
         """
@@ -178,10 +200,29 @@ class View():
             action = menu.exec_(self.feed_view.viewport().mapToGlobal(position))
 
             if action == delete_action:
-                self.button_delete(self.feed_model.itemFromIndex(index).feed_id)
+                self.button_delete(self.feed_model.itemFromIndex(index).data(DbRole))
+
+
+class ArticleModel(qtc.QAbstractItemModel):
+    def __init__(self, in_nodes):
+        qtc.QAbstractItemModel.__init__(self)
+        self._root = DbItem(None, 0)
 
 
 class DbItem(qtg.QStandardItem):
-    def __init__(self, text: str, feed_id: int):
+    def __init__(self, text: str, db_id: int):
         qtg.QStandardItem.__init__(self, text)
-        self.feed_id = feed_id
+        self.db_id : int = db_id
+        self.unread : bool = True
+
+    def data(self, role):
+        if role == BoldRole:
+            return self.unread
+        return qtg.QStandardItem.data(self, role)
+
+
+class BoldDelegate(qtw.QStyledItemDelegate):
+    def paint(self, painter, option, index):
+        # decide here if item should be bold and set font weight to bold if needed
+        option.font.setBold(index.data(BoldRole))
+        qtw.QStyledItemDelegate.paint(self, painter, option, index)

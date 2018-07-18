@@ -8,8 +8,7 @@ class WebFeed:
     """
     def __init__(self):
         self.db_id : int = None
-        self.identifier : str = None
-        self.uri : str = None
+        self.uri : str = None   # the id
         self.title : str = None
         self.author : str = None
         self.author_uri : str = None
@@ -25,8 +24,9 @@ class Article:
     Generic representation of an article in a feed.
     """
     def __init__(self):
-        self.identifier : str = None
-        self.uri : str = None
+        self.db_id : int = None
+        self.identifier : str = None    # the id
+        self.uri : str = None           # the first link href
         self.title : str = None
         self.updated : str = None
         self.author : str = None
@@ -34,25 +34,26 @@ class Article:
         self.content : str = None
         self.category : str = None
         self.published : str = None
+        self.unread : bool = None
 
 
 CompleteFeed = NamedTuple('CompleteFeed', [('feed', WebFeed), ('articles', List[Article])])
 
 
-def _article_append(to: WebFeed, entry) -> None:
+def _article_append(append_to: CompleteFeed, entry) -> None:
     """
-    Append an Article object corresponding to entry to list of Articles to.
+    Append an Article object to the list of articles in the CompleteFeed
     """
     new_article = Article()
     for child in entry:
         tag = child.tag.split('}', 1)[1]
         _substitute(new_article, child, atom_article_mapping, tag)
-    to.articles.append(new_article)
+    append_to.articles.append(new_article)
 
 
-def _author_cf_insert(to, entry) -> None:
+def _author_cf_insert(to: CompleteFeed, entry) -> None:
     """
-    Insert the "name" tag into to.author.
+    Insert the "name" tag into to.feed.author.
     """
     for piece in entry:
         tag = piece.tag.split('}', 1)[1]
@@ -62,7 +63,7 @@ def _author_cf_insert(to, entry) -> None:
 
 def _author_insert(to, entry) -> None:
     """
-    Insert the "name" tag into to.author.
+    Insert the "name" tag entry into to.author.
     """
     for piece in entry:
         tag = piece.tag.split('}', 1)[1]
@@ -70,11 +71,14 @@ def _author_insert(to, entry) -> None:
             to.author = piece.text
 
 
-feed_mapping = {
-    "atom" : "atom_mapping"
-}
+def _link_insert(to: Article, entry) -> None:
+    """
+    Insert the href attribute into to.
+    """
+    to.uri = entry.attrib['href']
 
-atom_mapping = {
+
+atom_feed_mapping = {
     "id" : "uri",
     "title" : "title",
     "updated" : "updated",
@@ -95,29 +99,29 @@ atom_article_mapping = {
     "updated" : "updated",
     "author" : _author_insert,
     "content" : "content",
-    "link" : "uri",
-    "summary" : "summary",
+    "link" : _link_insert,
+    "summary" : None,
     "category" : "category",
-    "contributor" : "contributor",
+    "contributor" : None,
     "published" : "published",
-    "rights" : "rights",
-    "source" : "source"
+    "rights" : None,
+    "source" : None
 }
 
 
-def _feed_substitute(obj, value, dict, key) -> None:
+def _cf_feed_substitute(cf: CompleteFeed, value, dict, key) -> None:
     """
-    Substitutes the attribute with the name corresponding to the 'dict' in object 'obj' with 'value'.
+    Substitutes the attribute with name corresponding in 'dict' in the feed portion of CompleteFeed 'cf' with 'value'.
     """
     if (callable(dict[key])):
-        dict[key](obj, value)
+        dict[key](cf, value)
     elif (isinstance(dict[key], str)):
-        setattr(obj.feed, dict[key], value.text)
+        setattr(cf.feed, dict[key], value.text)
 
 
 def _substitute(obj, value, dict, key) -> None:
     """
-    Substitutes the attribute with the name corresponding to the 'dict' in object 'obj' with 'value'.
+    Substitutes the attribute with name corresponding in 'dict' in object 'obj' with 'value'.
     """
     if (callable(dict[key])):
         dict[key](obj, value)
@@ -132,7 +136,8 @@ def atom_parse(parsed_xml) -> CompleteFeed:
     new_feed = CompleteFeed
     new_feed.feed = WebFeed()
     new_feed.articles = []
+    
     for child in parsed_xml:
         tag = child.tag.split('}', 1)[1]
-        _feed_substitute(new_feed, child, atom_mapping, tag)
+        _cf_feed_substitute(new_feed, child, atom_feed_mapping, tag)
     return new_feed
