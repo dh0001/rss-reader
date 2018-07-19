@@ -7,8 +7,6 @@ import PyQt5.QtWidgets as qtw
 import PyQt5.QtCore as qtc
 import PyQt5.QtGui as qtg
 
-
-
 from typing import List
 
 UnreadRole = qtc.Qt.UserRole + 1
@@ -28,7 +26,7 @@ class View():
         self.feeds_cache = self.feed_manager.get_all_feeds()
         self.articles_cache : List[feed.Article]
 
-        self.main_widget : qtw.QWidget
+        self.main_window : qtw.QMainWindow
         self.article_view : qtw.QTreeView
         self.feed_view : qtw.QTreeView
         self.content_view : qtw.QTextBrowser
@@ -36,23 +34,29 @@ class View():
         self.feed_model : qtg.QStandardItemModel
         self.article_model : qtg.QStandardItemModel
 
+        self.splitter1 : qtw.QSplitter
+        self.splitter2 : qtw.QSplitter
+
+        self.app : qtw.QApplication
+
 
     def cleanup(self) -> None:
-        self.main_widget.saveGeometry()
-
+        self.settings_manager.settings["geometry"] = bytes(self.main_window.saveGeometry().toHex()).decode("utf-8")
+        self.settings_manager.settings["splitter1"] = bytes(self.splitter1.saveState().toHex()).decode("utf-8")
+        self.settings_manager.settings["splitter2"] = bytes(self.splitter2.saveState().toHex()).decode("utf-8")
 
     def gui(self) -> None:
         """
         Starts the UI in graphical mode using qt. Initializes the window, views, and models.
         """
-        app = qtw.QApplication([])
+        self.app = qtw.QApplication([])
 
-        main_window = qtw.QMainWindow()
-        main_window.setWindowTitle('RSS Reader')
-        main_window.resize(700, 500)
+        self.main_window = qtw.QMainWindow()
+        self.main_window.setWindowTitle('RSS Reader')
+        # self.main_window.resize(800, 600)
 
-        self.main_widget = qtw.QWidget()   
-        main_window.setCentralWidget(self.main_widget)
+        main_widget = qtw.QWidget()   
+        self.main_window.setCentralWidget(main_widget)
 
         self.feed_model = qtg.QStandardItemModel()
         self.article_model = qtg.QStandardItemModel()
@@ -74,27 +78,32 @@ class View():
         self.feed_view.selectionModel().selectionChanged.connect(self.output_articles)
         self.article_view.selectionModel().selectionChanged.connect(self.output_content)
 
-        splitter1 = qtw.QSplitter(qtc.Qt.Vertical)
-        splitter1.addWidget(self.article_view)
-        splitter1.addWidget(self.content_view)
-        splitter2 = qtw.QSplitter(qtc.Qt.Horizontal)
-        splitter2.addWidget(self.feed_view)
-        splitter2.addWidget(splitter1)
-        splitter2.setSizes([200, 400])
+        self.splitter1 = qtw.QSplitter(qtc.Qt.Vertical)
+        self.splitter1.addWidget(self.article_view)
+        self.splitter1.addWidget(self.content_view)
+        self.splitter2 = qtw.QSplitter(qtc.Qt.Horizontal)
+        self.splitter2.addWidget(self.feed_view)
+        self.splitter2.addWidget(self.splitter1)
+        # self.splitter1.setSizes([200, 300])
+        # self.splitter2.setSizes([200, 500])
 
-        hbox = qtw.QHBoxLayout(self.main_widget)
-        hbox.addWidget(splitter2)
-        self.main_widget.setLayout(hbox)        
+        hbox = qtw.QHBoxLayout(main_widget)
+        hbox.addWidget(self.splitter2)
+        main_widget.setLayout(hbox)        
 
-        menu_bar = main_window.menuBar().addMenu('Options')
+        menu_bar = self.main_window.menuBar().addMenu('Options')
         menu_bar.addAction("Add Feed...").triggered.connect(self.button_add_feed)
         menu_bar.addAction("Download Feeds").triggered.connect(self.button_refresh)
         menu_bar.addAction("Reload Screen").triggered.connect(self.reset_screen)
         menu_bar.addSeparator()
         menu_bar.addAction("Exit").triggered.connect(qtc.QCoreApplication.quit)
 
-        main_window.show()
-        app.exec_()
+        self.main_window.restoreGeometry(qtc.QByteArray.fromHex(bytes(self.settings_manager.settings["geometry"], "utf-8")))
+        self.splitter1.restoreState(qtc.QByteArray.fromHex(bytes(self.settings_manager.settings["splitter1"], "utf-8")))
+        self.splitter2.restoreState(qtc.QByteArray.fromHex(bytes(self.settings_manager.settings["splitter2"], "utf-8")))
+
+        self.main_window.show()
+        self.app.exec_()
 
 
     def button_refresh(self) -> None:
@@ -139,7 +148,6 @@ class View():
         self.article_model.setHorizontalHeaderLabels(['Article', 'Author', 'Updated'])
         self.content_view.setHtml("")
         self.output_feeds()
-
 
 
     def output_feeds(self) -> None:

@@ -21,4 +21,5 @@ view.gui()
 
 # cleanup
 feed_manager.cleanup()
+view.cleanup()
 settings.cleanup()
