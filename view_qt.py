@@ -41,9 +41,15 @@ class View():
 
 
     def cleanup(self) -> None:
+        """
+        Should be called on program close. Saves panel states into settings.
+        """
         self.settings_manager.settings["geometry"] = bytes(self.main_window.saveGeometry().toHex()).decode("utf-8")
         self.settings_manager.settings["splitter1"] = bytes(self.splitter1.saveState().toHex()).decode("utf-8")
         self.settings_manager.settings["splitter2"] = bytes(self.splitter2.saveState().toHex()).decode("utf-8")
+        self.settings_manager.settings["article_view_headers"] = bytes(self.article_view.header().saveState().toHex()).decode("utf-8")
+        self.settings_manager.settings["feed_view_headers"] = bytes(self.feed_view.header().saveState().toHex()).decode("utf-8")
+
 
     def gui(self) -> None:
         """
@@ -59,21 +65,26 @@ class View():
         self.main_window.setCentralWidget(main_widget)
 
         self.feed_model = qtg.QStandardItemModel()
+        self.feed_model.setHorizontalHeaderLabels(['Feed Name', 'Unread'])
         self.article_model = qtg.QStandardItemModel()
+        self.article_model.setHorizontalHeaderLabels(['Article', 'Author', 'Updated'])
 
         self.feed_view = qtw.QTreeView()
         self.feed_view.setModel(self.feed_model)
         self.feed_view.setRootIsDecorated(False)
         self.feed_view.setContextMenuPolicy(qtc.Qt.CustomContextMenu)
         self.feed_view.customContextMenuRequested.connect(self.feed_context_menu)
+        self.feed_view.setSortingEnabled(True)
+        
         self.article_view = qtw.QTreeView()
         self.article_view.setModel(self.article_model)
         self.article_view.setRootIsDecorated(False)
         self.article_view.setItemDelegate(BoldDelegate())
+        self.article_view.sortByColumn(2, qtc.Qt.AscendingOrder)
+        self.article_view.setSortingEnabled(True)
+        
         self.content_view = qtw.QTextBrowser()
         self.content_view.setOpenExternalLinks(True)
-
-        self.reset_screen()
 
         self.feed_view.selectionModel().selectionChanged.connect(self.output_articles)
         self.article_view.selectionModel().selectionChanged.connect(self.output_content)
@@ -89,7 +100,7 @@ class View():
 
         hbox = qtw.QHBoxLayout(main_widget)
         hbox.addWidget(self.splitter2)
-        main_widget.setLayout(hbox)        
+        main_widget.setLayout(hbox)
 
         menu_bar = self.main_window.menuBar().addMenu('Options')
         menu_bar.addAction("Add Feed...").triggered.connect(self.button_add_feed)
@@ -101,7 +112,10 @@ class View():
         self.main_window.restoreGeometry(qtc.QByteArray.fromHex(bytes(self.settings_manager.settings["geometry"], "utf-8")))
         self.splitter1.restoreState(qtc.QByteArray.fromHex(bytes(self.settings_manager.settings["splitter1"], "utf-8")))
         self.splitter2.restoreState(qtc.QByteArray.fromHex(bytes(self.settings_manager.settings["splitter2"], "utf-8")))
+        self.feed_view.header().restoreState(qtc.QByteArray.fromHex(bytes(self.settings_manager.settings["feed_view_headers"], "utf-8")))
+        self.article_view.header().restoreState(qtc.QByteArray.fromHex(bytes(self.settings_manager.settings["article_view_headers"], "utf-8")))
 
+        self.output_feeds()
         self.main_window.show()
         self.app.exec_()
 
@@ -140,12 +154,8 @@ class View():
         """
         Deletes everything in the article, feed, and content view, then repopulates the feed view.
         """
-        self.feed_model.clear()
-        self.feed_model.setColumnCount(1)
-        self.feed_model.setHorizontalHeaderLabels(['Feed Name', 'Unread'])
-        self.article_model.clear()
-        self.article_model.setColumnCount(3)
-        self.article_model.setHorizontalHeaderLabels(['Article', 'Author', 'Updated'])
+        self.feed_model.removeRows(0, self.feed_model.rowCount())
+        self.article_model.removeRows(0, self.article_model.rowCount())
         self.content_view.setHtml("")
         self.output_feeds()
 
@@ -170,12 +180,10 @@ class View():
         """
         Gets highlighted feed in feeds_display, then outputs the articles from those feeds into the articles_display.
         """
-        self.article_model.clear()
-        self.article_model.setColumnCount(3)
-        self.article_model.setHorizontalHeaderLabels(['Article', 'Author', 'Updated'])
-
+        self.article_model.removeRows(0, self.article_model.rowCount())
         db_id = self.feed_view.currentIndex().data(DbRole)
         self.articles_cache = self.feed_manager.get_articles(db_id)
+        self.article_view.setSortingEnabled(False)
 
         for article in self.articles_cache:
             title = qtg.QStandardItem(article.title)
@@ -190,15 +198,22 @@ class View():
             updated.setEditable(False)
             self.article_model.appendRow([title, author, updated])
 
+        self.article_view.sortByColumn(self.article_view.header().sortIndicatorSection(), self.article_view.header().sortIndicatorOrder())
+        self.article_view.setSortingEnabled(True)
+        
+
 
     def output_content(self) -> None:
         """
         Gets highlighted article in article_display, then outputs the content into content_display.
         """
-        row = self.article_view.currentIndex().row()
-        article_db_id = self.article_model.item(row, 0).data(DbRole)
-        self.content_view.setHtml(next(x for x in self.articles_cache if x.db_id == article_db_id).content)
-        self.mark_article_read(row, article_db_id)
+        index = self.article_view.currentIndex()
+        
+        if index.isValid():
+            row = index.row()
+            article_db_id = self.article_model.item(row, 0).data(DbRole)
+            self.content_view.setHtml(next(x for x in self.articles_cache if x.db_id == article_db_id).content)
+            self.mark_article_read(row, article_db_id)
 
 
     def mark_article_read(self, row: int, article_id: int) -> None:

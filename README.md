@@ -6,6 +6,8 @@ A simple RSS Reader application which reads xml data adhering to the Atom specif
 
 ### Features
 
-* Read articles
+* Add RSS feeds
+* Read their articles
 * Automatically fetch new articles
 * Unread articles are highlighted
+* Sort articles
