@@ -1,9 +1,8 @@
 
 *
-!*/
-!.gitignore
 !*.py
-!*.json
+!.gitignore
+!defaultsettings.json
 .vscode
 
 

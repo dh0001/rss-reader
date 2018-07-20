@@ -5,7 +5,7 @@ from shutil import copyfile
 
 class Settings():
     
-    def __init__(self, file:str):
+    def __init__(self, file: str):
         """
         initialization.
         """
@@ -26,10 +26,3 @@ class Settings():
         """
         with open (self.settings_file, "w") as f:
             f.write(json.dumps(self.settings))
-
-    
-    def save_window_geometry(self, geo) -> None:
-        """
-        writes to the geometry setting in settings.
-        """
-        self.settings["geometry"] = geo.decode('utf-8')

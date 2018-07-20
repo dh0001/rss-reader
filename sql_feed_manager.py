@@ -7,12 +7,13 @@ import datetime
 import dateutil.parser
 import time
 import threading
+import settings
 from typing import List
 
 
 class FeedManager():
 
-    def __init__(self, settings):
+    def __init__(self, settings: settings.Settings):
         """
         initialization.
         """
@@ -86,32 +87,30 @@ class FeedManager():
         return articles
 
 
-    def _add_atom_file(self, data, location) -> None:
+    def _add_atom_file(self, data: any, download_uri: str) -> None:
         """
-        Add atom feed data to database.
+        Parse downloaded atom feed data, then insert the feed data and articles data into the database.
         """
-        output = feedutility.atom_parse(data)
-        new_articles = output.articles
-        new_feed = output.feed
-        new_feed.uri = location
-        row_id = self._add_feed_to_database(new_feed)
-        self._add_articles_to_database(new_articles, row_id)
+        parsed_completefeed = feedutility.atom_parse(data)
+        parsed_completefeed.feed.uri = download_uri
+        row_id = self._add_feed_to_database(parsed_completefeed.feed)
+        self._add_articles_to_database(parsed_completefeed.articles, row_id)
 
 
-    def add_file_from_disk(self, location) -> None:
+    def add_file_from_disk(self, location: str) -> None:
         """
-        add new feed to database from disk.
+        Add new feed to database from disk location.
         """
-        data = load_rss_from_disk(location)
+        data = _load_rss_from_disk(location)
         self._add_atom_file(data, location)
 
 
-    def add_feed_from_web(self, file) -> None:
+    def add_feed_from_web(self, download_uri: str) -> None:
         """
-        add new feed to database from web.
+        Add new feed to database from web location.
         """
-        data = _download_xml(file)
-        self._add_atom_file(data, file)
+        data = _download_xml(download_uri)
+        self._add_atom_file(data, download_uri)
 
 
     def get_all_feeds(self) -> List[feedutility.WebFeed]:
@@ -134,6 +133,9 @@ class FeedManager():
 
 
     def get_unread_articles_count(self, feed_id: int) -> int:
+        """
+        Return the number of unread articles for the feed with passed feed_id. Sql operation.
+        """
         return self.connection.cursor().execute('''SELECT count(*) FROM articles WHERE unread = 1 AND feed_id = ?''', [feed_id]).fetchone()[0]
     
 
@@ -141,24 +143,27 @@ class FeedManager():
         """
         Downloads a copy of every feed and updates the database using them.
         """
-        print("refreshing.")
+        #print("refreshing.")
         feeds = self.get_all_feeds()
         for feed in feeds:
             new_feed_data = feedutility.atom_parse(_download_xml(feed.uri))
             new_feed_data.feed.db_id = feed.db_id
             new_feed_data.feed.uri = feed.uri
             self._update_feed(new_feed_data.feed)
-            self._add_articles_to_database(_get_new_articles(new_feed_data, feed), feed.db_id)
+            self._add_articles_to_database(_filter_new_articles(new_feed_data.articles, feed.updated), feed.db_id)
         
             
     def scheduled_refresh(self) -> None:
+        """
+        Runs refresh_all, then schedules another refresh.
+        """
         self.refresh_all()
         self.refresh_schedule.enter(self.settings.settings["refresh_time"], 1, self.scheduled_refresh)
 
 
     def delete_feed(self, feed_id: int) -> None:
         """
-        removes a feed and its articles from the database.
+        Removes a feed with passed feed_id, and its articles from the database.
         """
         c = self.connection.cursor()
         c.execute('''DELETE FROM feeds WHERE rowid = ?''', [feed_id])
@@ -188,7 +193,7 @@ class FeedManager():
 
     def _add_articles_to_database(self, articles: List[feedutility.Article], feed_id: int) -> None:
         """
-        Add multiple articles to database. articles should be a list.
+        Add a list of articles to the database.
         """
         c = self.connection.cursor()
         entries = []
@@ -200,7 +205,7 @@ class FeedManager():
 
     def _update_feed(self, feed: feedutility.WebFeed) -> None:
         """
-        Update the corresponding feed in the database. Uses db_id to find the database entry.
+        Update the passed feed in the database.
         """
         c = self.connection.cursor()
         c.execute('''UPDATE feeds SET
@@ -219,16 +224,15 @@ class FeedManager():
         return
 
     
-def _get_new_articles(cf: feedutility.CompleteFeed, f: feedutility.WebFeed) -> List[feedutility.Article]:
+def _filter_new_articles(cf: List[feedutility.Article], old_date: str) -> List[feedutility.Article]:
     """
     Takes a CompleteFeed, a feed, and returns the new articles in the CompleteFeed.
     """
-    old_date = f.updated
     new_articles = [x for x in cf.articles if dateutil.parser.parse(x.updated) > dateutil.parser.parse(old_date)]
     return new_articles
     
 
-def _download_xml(uri) -> any:
+def _download_xml(uri: str) -> any:
     """
     Downloads file indicated by 'uri' using requests library, with a User-Agent header.
     """
@@ -236,16 +240,16 @@ def _download_xml(uri) -> any:
     return defusxml.fromstring(requests.get(uri, headers=headers).text)
 
 
-def write_string_to_file(str) -> None:
+def write_string_to_file(str: str) -> None:
     """
-    Write string to a file Output.xml.
+    Write string to the file named Output.xml.
     """
     text_file = open("Output.xml", "w", encoding="utf-8")
     text_file.write(str)
     return
 
 
-def load_rss_from_disk(f: str) -> str:
+def _load_rss_from_disk(f: str) -> str:
     """
     Returns content in file "f".
     """

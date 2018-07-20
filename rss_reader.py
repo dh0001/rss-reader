@@ -4,7 +4,7 @@ import requests
 
 # own modules
 import sql_feed_manager
-import view_qt as view_class
+import view as view_class
 import settings as settings_class
 
 

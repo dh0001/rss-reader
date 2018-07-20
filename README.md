@@ -18,3 +18,7 @@ A simple RSS Reader application which reads xml data adhering to the Atom specif
 * requests
 * defusedxml
 * python-dateutil
+
+## Running
+
+Run `rss_reader.py` with python 3.
