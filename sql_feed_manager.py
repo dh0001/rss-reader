@@ -21,13 +21,13 @@ class FeedManager():
 
         if self.settings.settings["first-run"] == "true":
             self.create_tables()
-            self.settings.settings["first-run"] == "false"
+            self.settings.settings["first-run"] = "false"
 
         self.db_lock = threading._allocate_lock()
         
         self.refresh_schedule = sched.scheduler(time.time, time.sleep)
         self.refresh_schedule.enter(settings.settings["refresh_time"], 1, self.scheduled_refresh)
-        self.refresh_schedule_thread = threading.Thread(target = self.refresh_schedule.run, daemon=True).start()
+        threading.Thread(target=self.refresh_schedule.run, daemon=True).start()
 
 
     def cleanup(self) -> None:
