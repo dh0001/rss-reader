@@ -9,6 +9,7 @@ import PyQt5.QtGui as qtg
 
 from typing import List
 
+def UNREAD_ROW_NUMBER(): return 1
 UnreadRole = qtc.Qt.UserRole + 1
 DbRole = qtc.Qt.UserRole + 2
 
@@ -18,11 +19,9 @@ class View():
         """
         initialization.
         """
-        self.feed_manager : sql_feed_manager.FeedManager
         self.feed_manager = feed_mgr
         self.settings_manager = settings
 
-        self.feeds_cache : List[feed.WebFeed]
         self.feeds_cache = self.feed_manager.get_all_feeds()
         self.articles_cache : List[feed.Article]
 
@@ -154,7 +153,6 @@ class View():
         """
         Deletes everything in the article, feed, and content view, then repopulates the feed view.
         """
-        self.feed_model.removeRows(0, self.feed_model.rowCount())
         self.article_model.removeRows(0, self.article_model.rowCount())
         self.content_view.setHtml("")
         self.output_feeds()
@@ -162,8 +160,9 @@ class View():
 
     def output_feeds(self) -> None:
         """
-        Populates the feed view.
+        Repopulates the feed view.
         """
+        self.feed_model.removeRows(0, self.feed_model.rowCount())
         self.feeds_cache = self.feed_manager.get_all_feeds()
 
         for feed in self.feeds_cache:
@@ -178,7 +177,7 @@ class View():
 
     def output_articles(self) -> None:
         """
-        Gets highlighted feed in feeds_display, then outputs the articles from those feeds into the articles_display.
+        Gets highlighted feed in feeds_view, then outputs the articles from those feeds into the articles_view.
         """
         self.article_model.removeRows(0, self.article_model.rowCount())
         db_id = self.feed_view.currentIndex().data(DbRole)
@@ -213,7 +212,8 @@ class View():
             row = index.row()
             article_db_id = self.article_model.item(row, 0).data(DbRole)
             self.content_view.setHtml(next(x for x in self.articles_cache if x.db_id == article_db_id).content)
-            self.mark_article_read(row, article_db_id)
+            if self.article_view.currentIndex().data(UnreadRole):
+                self.mark_article_read(row, article_db_id)
 
 
     def mark_article_read(self, row: int, article_id: int) -> None:
@@ -224,6 +224,9 @@ class View():
         self.article_model.item(row, 0).setData(False, UnreadRole)
         self.article_model.item(row, 1).setData(False, UnreadRole)
         self.article_model.item(row, 2).setData(False, UnreadRole)
+        feed_unread_item = self.feed_model.item(self.feed_view.currentIndex().row(), UNREAD_ROW_NUMBER())
+        feed_unread_item.setText(str(int(feed_unread_item.text()) - 1))
+
 
 
     def feed_context_menu(self, position) -> None:

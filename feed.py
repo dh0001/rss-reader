@@ -2,13 +2,13 @@ import defusedxml.ElementTree as ElemTree
 from typing import List, NamedTuple
 import collections
 
-class WebFeed:
+class Feed:
     """
-    class which holds a generic information from a website feed.
+    Class which holds information from an Atom RSS feed.
     """
     def __init__(self):
         self.db_id : int = None
-        self.uri : str = None   # the id
+        self.uri : str = None           # the id
         self.title : str = None
         self.author : str = None
         self.author_uri : str = None
@@ -16,12 +16,12 @@ class WebFeed:
         self.updated : str = None
         self.icon : str = None
         self.subtitle : str = None
-        self.feed_meta : str = None
+        self.meta : dict = {}
 
 
 class Article:
     """
-    Generic representation of an article in a feed.
+    Class which holds information from an entry in an Atom RSS feed.
     """
     def __init__(self):
         self.db_id : int = None
@@ -35,9 +35,10 @@ class Article:
         self.category : str = None
         self.published : str = None
         self.unread : bool = None
+        self.meta : dict = {}
 
 
-CompleteFeed = NamedTuple('CompleteFeed', [('feed', WebFeed), ('articles', List[Article])])
+CompleteFeed = NamedTuple('CompleteFeed', [('feed', Feed), ('articles', List[Article])])
 
 
 def _article_append(append_to: CompleteFeed, entry) -> None:
@@ -47,7 +48,7 @@ def _article_append(append_to: CompleteFeed, entry) -> None:
     new_article = Article()
     for child in entry:
         tag = child.tag.split('}', 1)[1]
-        _substitute(new_article, child, atom_article_mapping, tag)
+        _article_substitute(new_article, child, article_mapping, tag)
     append_to.articles.append(new_article)
 
 
@@ -78,7 +79,7 @@ def _link_insert(to: Article, entry) -> None:
     to.uri = entry.attrib['href']
 
 
-atom_feed_mapping = {
+feed_mapping = {
     "id" : "uri",
     "title" : "title",
     "updated" : "updated",
@@ -93,7 +94,7 @@ atom_feed_mapping = {
     "entry" : _article_append,
 }
 
-atom_article_mapping = {
+article_mapping = {
     "id" : "identifier",
     "title" : "title",
     "updated" : "updated",
@@ -109,24 +110,28 @@ atom_article_mapping = {
 }
 
 
-def _cf_feed_substitute(cf: CompleteFeed, value, dict, key) -> None:
+def _feed_substitute(cf: CompleteFeed, value: any, dictionary: dict, key: str) -> None:
     """
     Substitutes the attribute with name corresponding in 'dict' in the feed portion of CompleteFeed 'cf' with 'value'.
     """
-    if (callable(dict[key])):
-        dict[key](cf, value)
-    elif (isinstance(dict[key], str)):
-        setattr(cf.feed, dict[key], value.text)
+    if (callable(dictionary[key])):
+        dictionary[key](cf, value)
+    elif (isinstance(dictionary[key], str)):
+        setattr(cf.feed, dictionary[key], value.text)
+    # else:
+    #     cf.feed.meta[key] = value
 
 
-def _substitute(obj, value, dict, key) -> None:
+def _article_substitute(obj: object, value: any, dictionary: dict, key: str) -> None:
     """
     Substitutes the attribute with name corresponding in 'dict' in object 'obj' with 'value'.
     """
-    if (callable(dict[key])):
-        dict[key](obj, value)
-    elif (isinstance(dict[key], str)):
-        setattr(obj, dict[key], value.text)
+    if (callable(dictionary[key])):
+        dictionary[key](obj, value)
+    elif (isinstance(dictionary[key], str)):
+        setattr(obj, dictionary[key], value.text)
+    # else:
+    #     obj.meta[key] = value
 
 
 def atom_parse(parsed_xml) -> CompleteFeed:
@@ -134,10 +139,10 @@ def atom_parse(parsed_xml) -> CompleteFeed:
     Takes in parsed xml "parsed_xml" corresponding to an atom feed, and returns a CompleteFeed, containing the Feed and a list of Article.
     """
     new_feed = CompleteFeed
-    new_feed.feed = WebFeed()
+    new_feed.feed = Feed()
     new_feed.articles = []
     
     for child in parsed_xml:
         tag = child.tag.split('}', 1)[1]
-        _cf_feed_substitute(new_feed, child, atom_feed_mapping, tag)
+        _feed_substitute(new_feed, child, feed_mapping, tag)
     return new_feed

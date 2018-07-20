@@ -14,6 +14,8 @@ A simple RSS Reader application which reads xml data adhering to the Atom specif
 
 ## Required Packages
 
+Install them with pip.
+
 * PyQt5
 * requests
 * defusedxml
@@ -21,4 +23,4 @@ A simple RSS Reader application which reads xml data adhering to the Atom specif
 
 ## Running
 
-Run `rss_reader.py` with python 3.
+Have the required packages and run `rss_reader.py` with python 3. Reset by deleting feeds.db and settings.json.

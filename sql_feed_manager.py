@@ -8,6 +8,7 @@ import dateutil.parser
 import time
 import threading
 import settings
+import json
 from typing import List
 
 
@@ -113,14 +114,14 @@ class FeedManager():
         self._add_atom_file(data, download_uri)
 
 
-    def get_all_feeds(self) -> List[feedutility.WebFeed]:
+    def get_all_feeds(self) -> List[feedutility.Feed]:
         """
         Returns a list containing all the feeds in the database.
         """
         c = self.connection.cursor()
         feeds = []
         for feed in c.execute('''SELECT rowid, * FROM feeds'''):
-            new_feed = feedutility.WebFeed()
+            new_feed = feedutility.Feed()
             new_feed.db_id = feed[0]
             new_feed.uri = feed[1]
             new_feed.title = feed[2]
@@ -180,13 +181,13 @@ class FeedManager():
         self.connection.commit()
 
 
-    def _add_feed_to_database(self, feed:feedutility.WebFeed) -> int:
+    def _add_feed_to_database(self, feed:feedutility.Feed) -> int:
         """
         Add a feed entry into the database. Returns the row id of the inserted entry.
         """
         c = self.connection.cursor()
         c.execute('''INSERT INTO feeds VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
-            [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.subtitle, feed.feed_meta])
+            [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.subtitle, json.dumps(feed.meta)])
         self.connection.commit()
         return c.lastrowid
 
@@ -203,7 +204,7 @@ class FeedManager():
         self.connection.commit()
 
 
-    def _update_feed(self, feed: feedutility.WebFeed) -> None:
+    def _update_feed(self, feed: feedutility.Feed) -> None:
         """
         Update the passed feed in the database.
         """
@@ -219,16 +220,16 @@ class FeedManager():
         subtitle = ?,
         feed_meta = ? 
         WHERE rowid = ?''', 
-        [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.subtitle, feed.feed_meta, feed.db_id])
+        [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.subtitle, json.dumps(feed.meta), feed.db_id])
         self.connection.commit()
         return
 
     
-def _filter_new_articles(cf: List[feedutility.Article], old_date: str) -> List[feedutility.Article]:
+def _filter_new_articles(articles: List[feedutility.Article], old_date: str) -> List[feedutility.Article]:
     """
     Takes a CompleteFeed, a feed, and returns the new articles in the CompleteFeed.
     """
-    new_articles = [x for x in cf.articles if dateutil.parser.parse(x.updated) > dateutil.parser.parse(old_date)]
+    new_articles = [x for x in articles if dateutil.parser.parse(x.updated) > dateutil.parser.parse(old_date)]
     return new_articles
     
 
@@ -237,7 +238,8 @@ def _download_xml(uri: str) -> any:
     Downloads file indicated by 'uri' using requests library, with a User-Agent header.
     """
     headers = {'User-Agent' : 'python-rss-reader-side-project'}
-    return defusxml.fromstring(requests.get(uri, headers=headers).text)
+    file = requests.get(uri, headers=headers)
+    return defusxml.fromstring(file.text)
 
 
 def write_string_to_file(str: str) -> None:

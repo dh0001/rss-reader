@@ -22,7 +22,7 @@ class Settings():
 
     def cleanup(self) -> None:
         """
-        cleanup.
+        Should be run when before exit. Outputs settings to file.
         """
         with open (self.settings_file, "w") as f:
-            f.write(json.dumps(self.settings))
+            f.write(json.dumps(self.settings, indent=4))

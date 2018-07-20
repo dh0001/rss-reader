@@ -8,7 +8,6 @@ import view as view_class
 import settings as settings_class
 
 
-
 # initialization
 settings = settings_class.Settings("settings.json")
 feed_manager = sql_feed_manager.FeedManager(settings)
