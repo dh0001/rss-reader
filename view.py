@@ -1,7 +1,6 @@
 import feed
 import sql_feed_manager
 import settings
-import struct
 
 import PyQt5.QtWidgets as qtw
 import PyQt5.QtCore as qtc
@@ -74,6 +73,7 @@ class View():
         self.feed_view.setContextMenuPolicy(qtc.Qt.CustomContextMenu)
         self.feed_view.customContextMenuRequested.connect(self.feed_context_menu)
         self.feed_view.setSortingEnabled(True)
+        self.feed_view.header().setStretchLastSection(False)
         
         self.article_view = qtw.QTreeView()
         self.article_view.setModel(self.article_model)
@@ -81,6 +81,7 @@ class View():
         self.article_view.setItemDelegate(BoldDelegate())
         self.article_view.sortByColumn(2, qtc.Qt.AscendingOrder)
         self.article_view.setSortingEnabled(True)
+        self.article_view.header().setStretchLastSection(False)
         
         self.content_view = qtw.QTextBrowser()
         self.content_view.setOpenExternalLinks(True)

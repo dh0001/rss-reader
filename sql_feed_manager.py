@@ -3,8 +3,6 @@ import requests
 import defusedxml.ElementTree as defusxml
 import feed as feedutility
 import sched
-import datetime
-import dateutil.parser
 import time
 import threading
 import settings
@@ -227,9 +225,9 @@ class FeedManager():
     
 def _filter_new_articles(articles: List[feedutility.Article], old_date: str) -> List[feedutility.Article]:
     """
-    Takes a CompleteFeed, a feed, and returns the new articles in the CompleteFeed.
+    Returns a list of articles in articles that are newer than old_date.
     """
-    new_articles = [x for x in articles if dateutil.parser.parse(x.updated) > dateutil.parser.parse(old_date)]
+    new_articles = [x for x in articles if x.updated > old_date]
     return new_articles
     
 
