@@ -54,6 +54,7 @@ class FeedManager():
             feed_meta TEXT)''')
         c.execute('''CREATE TABLE articles (
             feed_id INTEGER,
+            identifier TEXT,
             uri TEXT,
             title TEXT,
             updated INTEGER,
@@ -75,14 +76,27 @@ class FeedManager():
             return_article = feedutility.Article()
             return_article.db_id = article[0]
             return_article.feed_id = article[1]
-            return_article.uri = article[2]
-            return_article.title = article[3]
-            return_article.updated = article[4]
-            return_article.author = article[5]
-            return_article.author_uri = article[6]
-            return_article.content = article[7]
-            return_article.unread = article[9]
+            return_article.identifier = article[2]
+            return_article.uri = article[3]
+            return_article.title = article[4]
+            return_article.updated = article[5]
+            return_article.author = article[6]
+            return_article.author_uri = article[7]
+            return_article.content = article[8]
+            return_article.published = article[9]
+            return_article.unread = article[10]
             articles.append(return_article)
+        return articles
+
+
+    def _get_article_identifiers(self, feed_id: int) -> set:
+        """
+        Returns a set containing all the article atom id's from the feed with passed feed_id's id.
+        """
+        c = self.connection.cursor()
+        articles = set()
+        for article in c.execute('''SELECT identifier FROM articles WHERE feed_id = ?''', [feed_id]):
+            articles.add(article[0])
         return articles
 
 
@@ -149,7 +163,7 @@ class FeedManager():
             new_feed_data.feed.db_id = feed.db_id
             new_feed_data.feed.uri = feed.uri
             self._update_feed(new_feed_data.feed)
-            self._add_articles_to_database(_filter_new_articles(new_feed_data.articles, feed.updated), feed.db_id)
+            self._add_articles_to_database(_filter_new_articles(new_feed_data.articles, feed.updated, self._get_article_identifiers(feed.db_id)), feed.db_id)
         
             
     def scheduled_refresh(self) -> None:
@@ -197,8 +211,8 @@ class FeedManager():
         c = self.connection.cursor()
         entries = []
         for article in articles:
-            entries.append((feed_id, article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published, 1))
-        c.executemany('''INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', entries)
+            entries.append((feed_id, article.identifier, article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published, 1))
+        c.executemany('''INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', entries)
         self.connection.commit()
 
 
@@ -223,11 +237,12 @@ class FeedManager():
         return
 
     
-def _filter_new_articles(articles: List[feedutility.Article], old_date: str) -> List[feedutility.Article]:
+def _filter_new_articles(articles: List[feedutility.Article], old_date: str, known_ids: set) -> List[feedutility.Article]:
     """
-    Returns a list of articles in articles that are newer than old_date.
+    Returns a list containing the articles in 'articles' which have an id which is not part of the known_ids set.
     """
-    new_articles = [x for x in articles if x.updated > old_date]
+    old_date = '0'
+    new_articles = [x for x in articles if x.updated > old_date and not x.identifier in known_ids]
     return new_articles
     
 
