@@ -17,6 +17,7 @@ class Feed:
         self.icon : str = None
         self.subtitle : str = None
         self.meta : dict = {}
+        self.unread_count : int = None
 
 
 class Article:
@@ -25,6 +26,7 @@ class Article:
     """
     def __init__(self):
         self.db_id : int = None
+        self.feed_id : int = None
         self.identifier : str = None    # the id
         self.uri : str = None           # the first link href
         self.title : str = None

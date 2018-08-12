@@ -19,7 +19,6 @@ Install them with pip.
 * PyQt5
 * requests
 * defusedxml
-* python-dateutil
 
 ## Running
 

@@ -7,8 +7,8 @@ import time
 import threading
 import settings
 import json
+import datetime
 from typing import List
-
 
 class FeedManager():
 
@@ -28,6 +28,10 @@ class FeedManager():
         self.refresh_schedule = sched.scheduler(time.time, time.sleep)
         self.refresh_schedule.enter(settings.settings["refresh_time"], 1, self.scheduled_refresh)
         threading.Thread(target=self.refresh_schedule.run, daemon=True).start()
+
+        self.time_limit = 60
+        self.new_feed_function : any = None
+        self.new_article_function : any = None
 
 
     def cleanup(self) -> None:
@@ -141,6 +145,7 @@ class FeedManager():
             new_feed.author_uri = feed[4]
             new_feed.category = feed[5]
             new_feed.updated = feed[6]
+            new_feed.unread_count = self.get_unread_articles_count(new_feed.db_id)
             feeds.append(new_feed)
         return feeds
 
@@ -154,16 +159,37 @@ class FeedManager():
 
     def refresh_all(self) -> None:
         """
-        Downloads a copy of every feed and updates the database using them.
+        Gets every feed from the database, then calls refresh_feed on all of them.
         """
         #print("refreshing.")
         feeds = self.get_all_feeds()
         for feed in feeds:
-            new_feed_data = feedutility.atom_parse(_download_xml(feed.uri))
-            new_feed_data.feed.db_id = feed.db_id
-            new_feed_data.feed.uri = feed.uri
-            self._update_feed(new_feed_data.feed)
-            self._add_articles_to_database(_filter_new_articles(new_feed_data.articles, feed.updated, self._get_article_identifiers(feed.db_id)), feed.db_id)
+            self.refresh_feed(feed)
+        date_cutoff = (datetime.datetime.utcnow() - datetime.timedelta(minutes=self.time_limit)).isoformat()
+        self._delete_old_articles(date_cutoff)
+
+
+    def refresh_feed(self, feed: feedutility.Feed) -> None:
+        """
+        Download a feed then update the database with the new data.
+        """
+        new_completefeed = feedutility.atom_parse(_download_xml(feed.uri))
+        new_completefeed.feed.db_id = feed.db_id
+        new_completefeed.feed.uri = feed.uri
+        
+        date_cutoff = (datetime.datetime.utcnow() - datetime.timedelta(minutes=self.time_limit)).isoformat()
+        new_articles = _filter_new_articles(new_completefeed.articles, date_cutoff, self._get_article_identifiers(feed.db_id))
+
+        self._update_feed(new_completefeed.feed)
+
+        for article in new_articles:
+            article.feed_id = new_completefeed.feed.db_id
+            article.unread = True
+
+        self._add_articles_to_database(new_articles, feed.db_id)
+
+        if callable(self.new_article_function):
+            self.new_article_function(new_articles, new_completefeed.feed.db_id)
         
             
     def scheduled_refresh(self) -> None:
@@ -193,7 +219,21 @@ class FeedManager():
         self.connection.commit()
 
 
-    def _add_feed_to_database(self, feed:feedutility.Feed) -> int:
+    def set_feed_notify(self, call: any) -> None:
+        """
+        Tells the feed manager to run the passed function when feed information changes. Passes a list of feed.
+        """
+        self.new_feed_function = call
+
+
+    def set_article_notify(self, call: any) -> None:
+        """
+        Tells the feed manager to run the passed function when article information changes. Passes a list of article.
+        """
+        self.new_article_function = call
+
+
+    def _add_feed_to_database(self, feed: feedutility.Feed) -> int:
         """
         Add a feed entry into the database. Returns the row id of the inserted entry.
         """
@@ -206,14 +246,21 @@ class FeedManager():
 
     def _add_articles_to_database(self, articles: List[feedutility.Article], feed_id: int) -> None:
         """
-        Add a list of articles to the database.
+        Add a list of articles to the database, and modify them with db_id filled in.
         """
         c = self.connection.cursor()
-        entries = []
         for article in articles:
-            entries.append((feed_id, article.identifier, article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published, 1))
-        c.executemany('''INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', entries)
+            c.execute('''INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
+                [feed_id, article.identifier, article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published, 1])
+            article.db_id = c.lastrowid
         self.connection.commit()
+
+        # c = self.connection.cursor()
+        # entries = []
+        # for article in articles:
+        #     entries.append((feed_id, article.identifier, article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published, 1))
+        # c.executemany('''INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', entries)
+        # self.connection.commit()
 
 
     def _update_feed(self, feed: feedutility.Feed) -> None:
@@ -234,15 +281,23 @@ class FeedManager():
         WHERE rowid = ?''', 
         [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.subtitle, json.dumps(feed.meta), feed.db_id])
         self.connection.commit()
-        return
+
+
+    def _delete_old_articles(self, time_limit: str) -> None:
+        """
+        Deletes articles in the database which are not after the passed time_limit. Time_limit is an iso formatted time.
+        """
+        c = self.connection.cursor()
+        c.execute('''DELETE from articles WHERE updated < ?''', [time_limit])
+        self.connection.commit()
+
 
     
-def _filter_new_articles(articles: List[feedutility.Article], old_date: str, known_ids: set) -> List[feedutility.Article]:
+def _filter_new_articles(articles: List[feedutility.Article], date_cutoff: str, known_ids: set) -> List[feedutility.Article]:
     """
     Returns a list containing the articles in 'articles' which have an id which is not part of the known_ids set.
     """
-    old_date = '0'
-    new_articles = [x for x in articles if x.updated > old_date and not x.identifier in known_ids]
+    new_articles = [x for x in articles if x.updated > date_cutoff and not x.identifier in known_ids]
     return new_articles
     
 

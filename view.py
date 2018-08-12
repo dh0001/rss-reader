@@ -8,9 +8,6 @@ import PyQt5.QtGui as qtg
 
 from typing import List
 
-def UNREAD_ROW_NUMBER(): return 1
-UnreadRole = qtc.Qt.UserRole + 1
-DbRole = qtc.Qt.UserRole + 2
 
 class View():
 
@@ -19,9 +16,11 @@ class View():
         initialization.
         """
         self.feed_manager = feed_mgr
+        self.feed_manager.set_article_notify(self.recieve_new_articles)
+        self.feed_manager.set_feed_notify(self.recieve_new_feeds)
         self.settings_manager = settings
 
-        self.feeds_cache = self.feed_manager.get_all_feeds()
+        self.feeds_cache : List[feed.Feed]
         self.articles_cache : List[feed.Article]
 
         self.main_window : qtw.QMainWindow
@@ -29,8 +28,8 @@ class View():
         self.feed_view : qtw.QTreeView
         self.content_view : qtw.QTextBrowser
 
-        self.feed_model : qtg.QStandardItemModel
-        self.article_model : qtg.QStandardItemModel
+        self.feed_model : FeedModel
+        self.article_model : ArticleModel
 
         self.splitter1 : qtw.QSplitter
         self.splitter2 : qtw.QSplitter
@@ -62,10 +61,8 @@ class View():
         main_widget = qtw.QWidget()   
         self.main_window.setCentralWidget(main_widget)
 
-        self.feed_model = qtg.QStandardItemModel()
-        self.feed_model.setHorizontalHeaderLabels(['Feed Name', 'Unread'])
-        self.article_model = qtg.QStandardItemModel()
-        self.article_model.setHorizontalHeaderLabels(['Article', 'Author', 'Updated'])
+        self.feed_model = FeedModel()
+        self.article_model = ArticleModel()
 
         self.feed_view = qtw.QTreeView()
         self.feed_view.setModel(self.feed_model)
@@ -74,18 +71,13 @@ class View():
         self.feed_view.customContextMenuRequested.connect(self.feed_context_menu)
         self.feed_view.setSortingEnabled(True)
         self.feed_view.header().setStretchLastSection(False)
-        
         self.article_view = qtw.QTreeView()
         self.article_view.setModel(self.article_model)
         self.article_view.setRootIsDecorated(False)
-        self.article_view.setItemDelegate(BoldDelegate())
-        self.article_view.sortByColumn(2, qtc.Qt.AscendingOrder)
         self.article_view.setSortingEnabled(True)
         self.article_view.header().setStretchLastSection(False)
-        
         self.content_view = qtw.QTextBrowser()
         self.content_view.setOpenExternalLinks(True)
-
         self.feed_view.selectionModel().selectionChanged.connect(self.output_articles)
         self.article_view.selectionModel().selectionChanged.connect(self.output_content)
 
@@ -104,8 +96,8 @@ class View():
 
         menu_bar = self.main_window.menuBar().addMenu('Options')
         menu_bar.addAction("Add Feed...").triggered.connect(self.button_add_feed)
-        menu_bar.addAction("Download Feeds").triggered.connect(self.button_refresh)
-        menu_bar.addAction("Reload Screen").triggered.connect(self.reset_screen)
+        menu_bar.addAction("Force Update Feeds").triggered.connect(self.button_refresh)
+        menu_bar.addAction("Refresh Caches").triggered.connect(self.reset_screen)
         menu_bar.addSeparator()
         menu_bar.addAction("Exit").triggered.connect(qtc.QCoreApplication.quit)
 
@@ -126,7 +118,8 @@ class View():
         """
         self.feed_manager.refresh_all()
         self.feeds_cache = self.feed_manager.get_all_feeds()
-        self.reset_screen()
+        self.feed_model.ar = self.feeds_cache
+        self.feed_model.update_all_counts()
 
 
     def button_add_feed(self) -> None:
@@ -142,66 +135,49 @@ class View():
             self.reset_screen()
 
 
-    def button_delete(self, db_id: int) -> None:
+    def button_delete(self, row: int) -> None:
         """
-        Called when the delete button is pressed.
+        Called when the delete button is pressed. Deletes the feed from the view then tells the feed manager
+        to remove it from the database.
         """
-        self.feed_manager.delete_feed(db_id)
+        self.feed_model.remove_feed(row)
+        self.feed_manager.delete_feed(self.feeds_cache[row].db_id)
         self.reset_screen()
 
 
     def reset_screen(self) -> None:
         """
-        Deletes everything in the article, feed, and content view, then repopulates the feed view.
+        Repopulates the feed view, and cause other views to clear.
         """
-        self.article_model.removeRows(0, self.article_model.rowCount())
-        self.content_view.setHtml("")
         self.output_feeds()
+        self.output_articles()
+        self.output_content()
 
 
     def output_feeds(self) -> None:
         """
         Repopulates the feed view.
         """
-        self.feed_model.removeRows(0, self.feed_model.rowCount())
         self.feeds_cache = self.feed_manager.get_all_feeds()
-
-        for feed in self.feeds_cache:
-            title = qtg.QStandardItem(feed.title)
-            title.setData(feed.db_id, DbRole)
-            title.setEditable(False)
-            unread_count = qtg.QStandardItem(str(self.feed_manager.get_unread_articles_count(feed.db_id)))
-            unread_count.setData(feed.db_id, DbRole)
-            unread_count.setEditable(False)
-            self.feed_model.appendRow([title, unread_count])
+        self.feed_model.set_feeds(self.feeds_cache)
 
 
     def output_articles(self) -> None:
         """
         Gets highlighted feed in feeds_view, then outputs the articles from those feeds into the articles_view.
         """
-        self.article_model.removeRows(0, self.article_model.rowCount())
-        db_id = self.feed_view.currentIndex().data(DbRole)
-        self.articles_cache = self.feed_manager.get_articles(db_id)
+        index = self.feed_view.currentIndex()
+        if index.isValid():
+            db_id = self.feeds_cache[index.row()].db_id
+            self.articles_cache = self.feed_manager.get_articles(db_id)
+        else:
+            self.articles_cache = []
+
         self.article_view.setSortingEnabled(False)
-
-        for article in self.articles_cache:
-            title = qtg.QStandardItem(article.title)
-            title.setData(article.db_id, DbRole)
-            title.setData(article.unread, UnreadRole)
-            title.setEditable(False)
-            author = qtg.QStandardItem(article.author)
-            author.setData(article.unread, UnreadRole)
-            author.setEditable(False)
-            updated = qtg.QStandardItem(article.updated)
-            updated.setData(article.unread, UnreadRole)
-            updated.setEditable(False)
-            self.article_model.appendRow([title, author, updated])
-
-        self.article_view.sortByColumn(self.article_view.header().sortIndicatorSection(), self.article_view.header().sortIndicatorOrder())
+        self.article_model.set_articles(self.articles_cache)
+        #self.article_view.sortByColumn(self.article_view.header().sortIndicatorSection(), self.article_view.header().sortIndicatorOrder())
         self.article_view.setSortingEnabled(True)
         
-
 
     def output_content(self) -> None:
         """
@@ -211,10 +187,12 @@ class View():
         
         if index.isValid():
             row = index.row()
-            article_db_id = self.article_model.item(row, 0).data(DbRole)
+            article_db_id = self.articles_cache[row].db_id
             self.content_view.setHtml(next(x for x in self.articles_cache if x.db_id == article_db_id).content)
-            if self.article_view.currentIndex().data(UnreadRole):
+            if self.articles_cache[row].unread == True:
                 self.mark_article_read(row, article_db_id)
+        else:
+            self.content_view.setHtml(None)
 
 
     def mark_article_read(self, row: int, article_id: int) -> None:
@@ -222,12 +200,10 @@ class View():
         Tells the feed manager to mark as read in the db and remove BoldRole from the row.
         """
         self.feed_manager.set_article_unread_status(article_id, False)
-        self.article_model.item(row, 0).setData(False, UnreadRole)
-        self.article_model.item(row, 1).setData(False, UnreadRole)
-        self.article_model.item(row, 2).setData(False, UnreadRole)
-        feed_unread_item = self.feed_model.item(self.feed_view.currentIndex().row(), UNREAD_ROW_NUMBER())
-        feed_unread_item.setText(str(int(feed_unread_item.text()) - 1))
-
+        self.articles_cache[row].unread = False
+        self.article_model.update_row_unread_status(row)
+        self.feeds_cache[self.feed_view.currentIndex().row()].unread_count -= 1
+        self.feed_model.update_row_unread_count(self.feed_view.currentIndex().row())
 
 
     def feed_context_menu(self, position) -> None:
@@ -242,35 +218,191 @@ class View():
             action = menu.exec_(self.feed_view.viewport().mapToGlobal(position))
 
             if action == delete_action:
-                self.button_delete(self.feed_model.itemFromIndex(index).data(DbRole))
+                self.button_delete(index.row())
 
 
-    def add_new_data(self) -> None:
+    def recieve_new_articles(self, articles: List[feed.Article], feed_id: int) -> None:
+        """
+        Recieves new article data from the feed manager and adds them to the views.
+        """
+        current_feed = self.feeds_cache[self.feed_view.currentIndex().row()].db_id
+
+        if current_feed == feed_id:
+            self.article_view.setSortingEnabled(False)
+            self.article_model.add_articles(articles)
+            self.article_view.setSortingEnabled(True)
+        
+        self.feed_model.update_all_counts()
+            
+
+    def recieve_new_feeds(self, feeds: List[feed.Feed]) -> None:
         """
         Recieves new feed data from the feed manager and adds them to the views.
         """
+        for f in feeds:
+            self.feed_model.add_feed(f)
 
 
-# class ArticleModel(qtc.QAbstractItemModel):
-#     def __init__(self, in_nodes):
-#         qtc.QAbstractItemModel.__init__(self)
-#         self._root = DbItem(None, 0)
+class ArticleModel(qtc.QAbstractItemModel):
+    def __init__(self):
+        """
+        initialization.
+        """
+        qtc.QAbstractItemModel.__init__(self)
+        self.ar : List[feed.Article] = []
+
+    def rowCount(self, index: qtc.QModelIndex):
+        """
+        Returns the number of rows. When index is a valid row in the model, returns 0.
+        """
+        if index.isValid():
+            return 0
+        return len(self.ar)
+
+    def add_articles(self, articles: List[feed.Article]):
+        """
+        Adds appends an article to the cache, while refreshing the view.
+        """
+        self.beginInsertRows(qtc.QModelIndex(), len(self.ar), len(articles))
+        self.ar += articles
+        self.endInsertRows()
+
+    def index(self, in_row, in_column, in_parent=None):
+        """
+        Returns QModelIndex for given row/column.
+        """
+        if not qtc.QAbstractItemModel.hasIndex(self, in_row, in_column):
+            return qtc.QModelIndex()
+        return qtc.QAbstractItemModel.createIndex(self, in_row, in_column, 1)
+
+    def parent(self, in_index):
+        """
+        Returns an invalid index, model does not have subtrees.
+        """
+        return qtc.QModelIndex()
+
+    def columnCount(self, in_index):
+        """
+        Returns the number of columns.
+        """
+        return 3
+
+    def data(self, in_index, role):
+        if not in_index.isValid():
+            return None
+        if role == qtc.Qt.DisplayRole:
+            if in_index.column() == 0:
+                return self.ar[in_index.row()].title
+            if in_index.column() == 1:
+                return self.ar[in_index.row()].author
+            if in_index.column() == 2:
+                return self.ar[in_index.row()].updated
+        if role == qtc.Qt.FontRole and self.ar[in_index.row()].unread == True:
+            f = qtg.QFont()
+            f.setBold(True)
+            return f
+        return None
+
+    def set_articles(self, articles) -> None:
+        self.beginResetModel()
+        self.ar = articles
+        self.endResetModel()
+
+    def headerData(self, section, orientation, role=qtc.Qt.DisplayRole):
+        if role == qtc.Qt.DisplayRole:
+            if orientation == qtc.Qt.Horizontal: # Horizontal
+                return {
+                    0: "Name",
+                    1: "Author",
+                    2: "Updated"
+                }.get(section, None)
+
+    def sort(self, column, order=qtc.Qt.AscendingOrder):
+        self.beginResetModel()
+        order = True if order == qtc.Qt.AscendingOrder else False
+        if column == 0:
+            self.ar.sort(key=lambda e: e.title, reverse=order)
+        if column == 1:
+            self.ar.sort(key=lambda e: e.author, reverse=order)
+        if column == 2:
+            self.ar.sort(key=lambda e: e.updated, reverse=order)
+        self.endResetModel()
+
+    def update_row_unread_status(self, row):
+        self.dataChanged.emit(self.index(row, 0), self.index(row, 0), [qtc.Qt.FontRole])
 
 
-# class DbItem(qtg.QStandardItem):
-#     def __init__(self, text: str, db_id: int):
-#         qtg.QStandardItem.__init__(self, text)
-#         self.db_id : int = db_id
-#         self.unread : bool = True
 
-#     def data(self, role):
-#         if role == UnreadRole:
-#             return self.unread
-#         return qtg.QStandardItem.data(self, role)
+class FeedModel(qtc.QAbstractItemModel):
+    def __init__(self):
+        qtc.QAbstractItemModel.__init__(self)
+        self.ar : List[feed.Feed] = []
+
+    def rowCount(self, in_index):
+        if in_index.isValid():
+            return 0
+        return len(self.ar)
+
+    def add_feed(self, in_node):
+        self.beginInsertRows()
+        self.ar.append(in_node)
+        self.endInsertRows()
+
+    def remove_feed(self, row):
+        self.beginRemoveRows()
+        self.ar.remove(row)
+        self.endRemoveRows()
 
 
-class BoldDelegate(qtw.QStyledItemDelegate):
-    def paint(self, painter, option, index):
-        # decide here if item should be bold and set font weight to bold if needed
-        option.font.setBold(index.data(UnreadRole))
-        qtw.QStyledItemDelegate.paint(self, painter, option, index)
+    def index(self, in_row, in_column, in_parent=None):
+        if not qtc.QAbstractItemModel.hasIndex(self, in_row, in_column):
+            return qtc.QModelIndex()
+        return qtc.QAbstractItemModel.createIndex(self, in_row, in_column, 1)
+
+    def parent(self, in_index):
+        return qtc.QModelIndex()
+
+    def columnCount(self, in_index):
+        return 2
+
+    def data(self, in_index, role):
+        if not in_index.isValid():
+            return None
+        if role == qtc.Qt.DisplayRole:
+            if in_index.column() == 0:
+                return self.ar[in_index.row()].title
+            if in_index.column() == 1:
+                return self.ar[in_index.row()].unread_count
+        elif role == qtc.Qt.FontRole:
+            if self.ar[in_index.row()].unread_count > 0:
+                f = qtg.QFont()
+                f.setBold(True)
+                return f
+        return None
+
+    def set_feeds(self, feeds) -> None:
+        self.beginResetModel()
+        self.ar = feeds
+        self.endResetModel()
+
+    def headerData(self, section, orientation, role=qtc.Qt.DisplayRole):
+        if role == qtc.Qt.DisplayRole:
+            if orientation == qtc.Qt.Horizontal: # Horizontal
+                return {
+                    0: "Feed Name",
+                    1: "Unread"
+                }.get(section, None)
+
+    def sort(self, column, order=qtc.Qt.AscendingOrder):
+        order = True if order == qtc.Qt.AscendingOrder else False
+        if column == 0:
+            self.ar.sort(key=lambda e: e.title, reverse=order)
+        if column == 1:
+            self.ar.sort(key=lambda e: e.author, reverse=order)
+        self.dataChanged.emit(qtc.QModelIndex(), qtc.QModelIndex())
+
+    def update_row_unread_count(self, row):
+        self.dataChanged.emit(self.index(row, 0), self.index(row, 1), [qtc.Qt.DisplayRole, qtc.Qt.FontRole])
+
+    def update_all_counts(self):
+        self.dataChanged.emit(qtc.QModelIndex(), qtc.QModelIndex())
