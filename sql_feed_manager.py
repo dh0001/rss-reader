@@ -29,7 +29,7 @@ class FeedManager():
         self.refresh_schedule.enter(settings.settings["refresh_time"], 1, self.scheduled_refresh)
         threading.Thread(target=self.refresh_schedule.run, daemon=True).start()
 
-        self.time_limit = 60
+        self.time_limit = self.settings.settings["default_delete_time"]
         self.new_feed_function : any = None
         self.new_article_function : any = None
 
@@ -171,7 +171,7 @@ class FeedManager():
 
     def refresh_feed(self, feed: feedutility.Feed) -> None:
         """
-        Download a feed then update the database with the new data.
+        Download a feed and updates the database with the new data. Also calls the new article function with a list of new articles.
         """
         new_completefeed = feedutility.atom_parse(_download_xml(feed.uri))
         new_completefeed.feed.db_id = feed.db_id

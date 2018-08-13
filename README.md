@@ -20,6 +20,6 @@ Install them with pip.
 * requests
 * defusedxml
 
-## Running
+## Usage
 
-Have the required packages and run `rss_reader.py` with python 3. Reset by deleting feeds.db and settings.json.
+Run by having the required packages and running `rss_reader.py` with python 3. Reset by deleting feeds.db and settings.json.

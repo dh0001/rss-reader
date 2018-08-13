@@ -75,6 +75,7 @@ class View():
         self.article_view.setModel(self.article_model)
         self.article_view.setRootIsDecorated(False)
         self.article_view.setSortingEnabled(True)
+        self.article_view.customContextMenuRequested.connect(self.feed_context_menu)
         self.article_view.header().setStretchLastSection(False)
         self.content_view = qtw.QTextBrowser()
         self.content_view.setOpenExternalLinks(True)
@@ -108,15 +109,20 @@ class View():
         self.article_view.header().restoreState(qtc.QByteArray.fromHex(bytes(self.settings_manager.settings["article_view_headers"], "utf-8")))
 
         self.output_feeds()
+        self.button_refresh()
         self.main_window.show()
         self.app.exec_()
 
 
-    def button_refresh(self) -> None:
+    def button_refresh(self, which=None) -> None:
         """
         Called when a refresh button is pressed. Tells the feed manager to update the feeds.
         """
-        self.feed_manager.refresh_all()
+        if which == None:
+            self.feed_manager.refresh_all()
+        else:
+            self.feed_manager.refresh_feed(which)
+        
         self.feeds_cache = self.feed_manager.get_all_feeds()
         self.feed_model.ar = self.feeds_cache
         self.feed_model.update_all_counts()
@@ -214,7 +220,25 @@ class View():
         
         if index.isValid():
             menu = qtw.QMenu()
-            delete_action = menu.addAction("Delete Feed")
+            delete = menu.addAction("Delete Feed")
+            refresh = menu.addAction("Refresh Feed")
+            action = menu.exec_(self.feed_view.viewport().mapToGlobal(position))
+
+            if action == delete:
+                self.button_delete(index.row())
+            elif action == refresh:
+                self.button_refresh(self.feeds_cache[index.row()])
+
+    
+    def article_context_menu(self, position) -> None:
+        """
+        Outputs the context menu for items in the article view.
+        """
+        index = self.feed_view.indexAt(position)
+        
+        if index.isValid():
+            menu = qtw.QMenu()
+            delete_action = menu.addAction("Mark")
             action = menu.exec_(self.feed_view.viewport().mapToGlobal(position))
 
             if action == delete_action:
@@ -225,14 +249,11 @@ class View():
         """
         Recieves new article data from the feed manager and adds them to the views.
         """
-        current_feed = self.feeds_cache[self.feed_view.currentIndex().row()].db_id
-
-        if current_feed == feed_id:
+        current_index = self.feed_view.currentIndex()
+        if current_index.isValid() and self.feeds_cache[current_index.row()].db_id == feed_id:
             self.article_view.setSortingEnabled(False)
             self.article_model.add_articles(articles)
             self.article_view.setSortingEnabled(True)
-        
-        self.feed_model.update_all_counts()
             
 
     def recieve_new_feeds(self, feeds: List[feed.Feed]) -> None:
