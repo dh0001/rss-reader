@@ -55,6 +55,7 @@ class FeedManager():
             updated INTEGER,
             icon_uri TEXT,
             subtitle TEXT,
+            refresh_rate INTEGER,
             feed_meta TEXT)''')
         c.execute('''CREATE TABLE articles (
             feed_id INTEGER,
@@ -145,6 +146,10 @@ class FeedManager():
             new_feed.author_uri = feed[4]
             new_feed.category = feed[5]
             new_feed.updated = feed[6]
+            new_feed.icon_uri = feed[7]
+            new_feed.subtitle = feed[8]
+            new_feed.refresh_rate = feed[9]
+            new_feed.meta = feed[10]
             new_feed.unread_count = self.get_unread_articles_count(new_feed.db_id)
             feeds.append(new_feed)
         return feeds
@@ -233,13 +238,30 @@ class FeedManager():
         self.new_article_function = call
 
 
+    def set_refresh_rate(self, feed: feedutility.Feed, rate: int) -> None:
+        """
+        """
+
+
+    def verify_feed_url(self, url: str) -> None:
+        """
+        Verifies if a url points to a proper feed.
+        """
+        try:
+            feedutility.atom_parse(_download_xml(url))
+            return True
+        except Exception:
+            pass
+        return False
+
+
     def _add_feed_to_database(self, feed: feedutility.Feed) -> int:
         """
         Add a feed entry into the database. Returns the row id of the inserted entry.
         """
         c = self.connection.cursor()
-        c.execute('''INSERT INTO feeds VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
-            [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.subtitle, json.dumps(feed.meta)])
+        c.execute('''INSERT INTO feeds VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
+            [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon_uri, feed.subtitle, feed.refresh_rate, json.dumps(feed.meta)])
         self.connection.commit()
         return c.lastrowid
 
@@ -279,7 +301,7 @@ class FeedManager():
         subtitle = ?,
         feed_meta = ? 
         WHERE rowid = ?''', 
-        [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon, feed.subtitle, json.dumps(feed.meta), feed.db_id])
+        [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon_uri, feed.subtitle, json.dumps(feed.meta), feed.db_id])
         self.connection.commit()
 
 

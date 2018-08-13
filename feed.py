@@ -14,10 +14,11 @@ class Feed:
         self.author_uri : str = None
         self.category : str = None
         self.updated : str = None
-        self.icon : str = None
+        self.icon_uri : str = None
         self.subtitle : str = None
         self.meta : dict = {}
         self.unread_count : int = None
+        self.refresh_rate : int = None
 
 
 class Article:

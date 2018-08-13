@@ -97,7 +97,7 @@ class View():
 
         menu_bar = self.main_window.menuBar().addMenu('Options')
         menu_bar.addAction("Add Feed...").triggered.connect(self.button_add_feed)
-        menu_bar.addAction("Force Update Feeds").triggered.connect(self.button_refresh)
+        menu_bar.addAction("Force Update Feeds").triggered.connect(self.button_refresh_all)
         menu_bar.addAction("Refresh Caches").triggered.connect(self.reset_screen)
         menu_bar.addSeparator()
         menu_bar.addAction("Exit").triggered.connect(qtc.QCoreApplication.quit)
@@ -109,20 +109,26 @@ class View():
         self.article_view.header().restoreState(qtc.QByteArray.fromHex(bytes(self.settings_manager.settings["article_view_headers"], "utf-8")))
 
         self.output_feeds()
-        self.button_refresh()
+        self.button_refresh_all()
         self.main_window.show()
         self.app.exec_()
 
 
-    def button_refresh(self, which=None) -> None:
+    def button_refresh_all(self, which=None) -> None:
         """
-        Called when a refresh button is pressed. Tells the feed manager to update the feeds.
+        Called when the refresh all button is pressed. Tells the feed manager to update all the feeds.
         """
-        if which == None:
-            self.feed_manager.refresh_all()
-        else:
-            self.feed_manager.refresh_feed(which)
-        
+        self.feed_manager.refresh_all()
+        self.feeds_cache = self.feed_manager.get_all_feeds()
+        self.feed_model.ar = self.feeds_cache
+        self.feed_model.update_all_counts()
+
+
+    def button_refresh(self, which) -> None:
+        """
+        Called when a refresh button is pressed. Tells the feed manager to update the feed.
+        """
+        self.feed_manager.refresh_feed(which)
         self.feeds_cache = self.feed_manager.get_all_feeds()
         self.feed_model.ar = self.feeds_cache
         self.feed_model.update_all_counts()
@@ -130,15 +136,20 @@ class View():
 
     def button_add_feed(self) -> None:
         """
-        Called when the add feed button is pressed.
+        Called when the add feed button is pressed. Opens a dialog which allows inputting a new feed.
         """
-        inputDialog = qtw.QInputDialog(None, qtc.Qt.WindowSystemMenuHint | qtc.Qt.WindowTitleHint)
-        inputDialog.setWindowTitle("Add Feed")
-        inputDialog.setLabelText("Feed Url:")
-        inputDialog.show()
-        if (inputDialog.exec_() == qtw.QDialog.Accepted):
-            self.feed_manager.add_feed_from_web(inputDialog.textValue())
+
+        dialog = GenericDialog(self.feed_manager.verify_feed_url, "Add Feed:", "Add Feed")
+        if (dialog.exec_() == qtw.QDialog.Accepted):
+            self.feed_manager.add_feed_from_web(dialog.get_response())
             self.reset_screen()
+        # inputDialog = qtw.QInputDialog(None, qtc.Qt.WindowSystemMenuHint | qtc.Qt.WindowTitleHint)
+        # inputDialog.setWindowTitle("Add Feed")
+        # inputDialog.setLabelText("Feed Url:")
+        # inputDialog.show()
+        # if (inputDialog.exec_() == qtw.QDialog.Accepted):
+        #     self.feed_manager.add_feed_from_web(inputDialog.textValue())
+        #     self.reset_screen()
 
 
     def button_delete(self, row: int) -> None:
@@ -220,14 +231,19 @@ class View():
         
         if index.isValid():
             menu = qtw.QMenu()
-            delete = menu.addAction("Delete Feed")
             refresh = menu.addAction("Refresh Feed")
+            delete = menu.addAction("Delete Feed")
+            set_refresh_rate = menu.addAction("Set Refresh Rate")
             action = menu.exec_(self.feed_view.viewport().mapToGlobal(position))
 
             if action == delete:
                 self.button_delete(index.row())
             elif action == refresh:
                 self.button_refresh(self.feeds_cache[index.row()])
+            elif action == set_refresh_rate:
+                dialog = GenericDialog(lambda x: x.isdigit(), "Refresh Rate (minutes):", "Set Refresh Rate")
+                if (dialog.exec_() == qtw.QDialog.Accepted):
+                    self.feed_manager.set_refresh_rate(self.feeds_cache[index.row()], dialog.get_response)
 
     
     def article_context_menu(self, position) -> None:
@@ -427,3 +443,46 @@ class FeedModel(qtc.QAbstractItemModel):
 
     def update_all_counts(self):
         self.dataChanged.emit(qtc.QModelIndex(), qtc.QModelIndex())
+
+
+class GenericDialog(qtw.QDialog):
+
+    def __init__(self, verify, prompt, window_title):
+        qtw.QDialog.__init__(self, None, qtc.Qt.WindowCloseButtonHint | qtc.Qt.WindowTitleHint)
+
+        self.setObjectName(window_title)
+
+        self.verify_function = verify
+        
+        vbox = qtw.QGridLayout()
+        vbox.addWidget(qtw.QLabel(prompt), 0, 0, 1, 2)
+
+        self.le = qtw.QLineEdit()
+        vbox.addWidget(self.le, 1, 0, 1, 2)
+
+        buttonBox = qtw.QDialogButtonBox(qtw.QDialogButtonBox.Ok | qtw.QDialogButtonBox.Cancel)
+        buttonBox.accepted.connect(self.verify_response)
+        buttonBox.rejected.connect(self.reject)
+        vbox.addWidget(buttonBox, 2, 1, 1, 1)
+
+        self.error_label = qtw.QLabel("")
+        self.error_label.setMinimumWidth(qtg.QFontMetrics(qtg.QFont()).width("Verify Failed"))
+        vbox.addWidget(self.error_label, 2, 0, 1, 1)
+
+        vbox.setSizeConstraint(qtw.QLayout.SetFixedSize)
+
+        self.setLayout(vbox)
+
+        self.show()
+
+    def verify_response(self):
+        
+        self.error_label.setText("Verifying...")
+        if self.verify_function(self.le.text()):
+            self.accept()
+        else:
+            self.error_label.setText("Verify Failed")
+
+
+    def get_response(self):
+        return self.le.text()
