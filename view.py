@@ -18,6 +18,7 @@ class View():
         self.feed_manager = feed_mgr
         self.feed_manager.set_article_notify(self.recieve_new_articles)
         self.feed_manager.set_feed_notify(self.recieve_new_feeds)
+        self.feed_manager.set_feed_data_changed_notify(self.feed_data_changed)
         self.settings_manager = settings
 
         self.feeds_cache : List[feed.Feed]
@@ -119,9 +120,7 @@ class View():
         Called when the refresh all button is pressed. Tells the feed manager to update all the feeds.
         """
         self.feed_manager.refresh_all()
-        self.feeds_cache = self.feed_manager.get_all_feeds()
-        self.feed_model.ar = self.feeds_cache
-        self.feed_model.update_all_counts()
+        self.feed_data_changed()
 
 
     def button_refresh(self, which) -> None:
@@ -129,9 +128,7 @@ class View():
         Called when a refresh button is pressed. Tells the feed manager to update the feed.
         """
         self.feed_manager.refresh_feed(which)
-        self.feeds_cache = self.feed_manager.get_all_feeds()
-        self.feed_model.ar = self.feeds_cache
-        self.feed_model.update_all_counts()
+        self.feed_data_changed()
 
 
     def button_add_feed(self) -> None:
@@ -157,8 +154,8 @@ class View():
         Called when the delete button is pressed. Deletes the feed from the view then tells the feed manager
         to remove it from the database.
         """
+        self.feed_manager.delete_feed(self.feeds_cache[row])
         self.feed_model.remove_feed(row)
-        self.feed_manager.delete_feed(self.feeds_cache[row].db_id)
         self.reset_screen()
 
 
@@ -220,7 +217,7 @@ class View():
         self.articles_cache[row].unread = False
         self.article_model.update_row_unread_status(row)
         self.feeds_cache[self.feed_view.currentIndex().row()].unread_count -= 1
-        self.feed_model.update_row_unread_count(self.feed_view.currentIndex().row())
+        self.feed_model.update_row(self.feed_view.currentIndex().row())
 
 
     def feed_context_menu(self, position) -> None:
@@ -243,7 +240,8 @@ class View():
             elif action == set_refresh_rate:
                 dialog = GenericDialog(lambda x: x.isdigit(), "Refresh Rate (minutes):", "Set Refresh Rate")
                 if (dialog.exec_() == qtw.QDialog.Accepted):
-                    self.feed_manager.set_refresh_rate(self.feeds_cache[index.row()], dialog.get_response)
+                    self.feed_manager.set_refresh_rate(self.feeds_cache[index.row()], int(dialog.get_response()))
+                    self.feed_model.update_row(index.row())
 
     
     def article_context_menu(self, position) -> None:
@@ -278,6 +276,15 @@ class View():
         """
         for f in feeds:
             self.feed_model.add_feed(f)
+
+
+    def feed_data_changed(self) -> None:
+        """
+        Updates feed information.
+        """
+        self.feeds_cache = self.feed_manager.get_all_feeds()
+        self.feed_model.update_data(self.feeds_cache)
+
 
 
 class ArticleModel(qtc.QAbstractItemModel):
@@ -380,14 +387,17 @@ class FeedModel(qtc.QAbstractItemModel):
             return 0
         return len(self.ar)
 
-    def add_feed(self, in_node):
-        self.beginInsertRows()
-        self.ar.append(in_node)
+    def add_feed(self, feed):
+        self.beginInsertRows(qtc.QModelIndex(), len(self.ar), 1)
+        self.ar.append(feed)
         self.endInsertRows()
 
     def remove_feed(self, row):
-        self.beginRemoveRows()
-        self.ar.remove(row)
+        """
+        Removes the feed in the view, and in the cache.
+        """
+        self.beginRemoveRows(qtc.QModelIndex(), row, row)
+        del self.ar[row]
         self.endRemoveRows()
 
 
@@ -409,7 +419,7 @@ class FeedModel(qtc.QAbstractItemModel):
             if in_index.column() == 0:
                 return self.ar[in_index.row()].title
             if in_index.column() == 1:
-                return self.ar[in_index.row()].unread_count
+                return self.ar[in_index.row()].refresh_rate
         elif role == qtc.Qt.FontRole:
             if self.ar[in_index.row()].unread_count > 0:
                 f = qtg.QFont()
@@ -417,7 +427,7 @@ class FeedModel(qtc.QAbstractItemModel):
                 return f
         return None
 
-    def set_feeds(self, feeds) -> None:
+    def set_feeds(self, feeds: List[feed.Feed]) -> None:
         self.beginResetModel()
         self.ar = feeds
         self.endResetModel()
@@ -438,10 +448,11 @@ class FeedModel(qtc.QAbstractItemModel):
             self.ar.sort(key=lambda e: e.author, reverse=order)
         self.dataChanged.emit(qtc.QModelIndex(), qtc.QModelIndex())
 
-    def update_row_unread_count(self, row):
+    def update_row(self, row: int):
         self.dataChanged.emit(self.index(row, 0), self.index(row, 1), [qtc.Qt.DisplayRole, qtc.Qt.FontRole])
 
-    def update_all_counts(self):
+    def update_data(self, feeds: List[feed.Feed]):
+        self.ar = feeds
         self.dataChanged.emit(qtc.QModelIndex(), qtc.QModelIndex())
 
 
