@@ -117,14 +117,15 @@ class FeedManager():
             new_feed.db_id = feed[0]
             new_feed.uri = feed[1]
             new_feed.title = feed[2]
-            new_feed.author = feed[3]
-            new_feed.author_uri = feed[4]
-            new_feed.category = feed[5]
-            new_feed.updated = feed[6]
-            new_feed.icon_uri = feed[7]
-            new_feed.subtitle = feed[8]
-            new_feed.refresh_rate = feed[9]
-            new_feed.meta = feed[10]
+            new_feed.user_title = feed[3]
+            new_feed.author = feed[4]
+            new_feed.author_uri = feed[5]
+            new_feed.category = feed[6]
+            new_feed.updated = feed[7]
+            new_feed.icon_uri = feed[8]
+            new_feed.subtitle = feed[9]
+            new_feed.refresh_rate = feed[10]
+            new_feed.meta = feed[11]
             new_feed.unread_count = self.get_unread_articles_count(new_feed.db_id)
             feeds.append(new_feed)
         return feeds
