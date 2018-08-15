@@ -8,7 +8,7 @@ import threading
 import settings
 import json
 import datetime
-from typing import List
+from typing import List, Union
 
 class _FeedRefresh():
     """
@@ -85,7 +85,9 @@ class FeedManager():
         parsed_completefeed = feedutility.atom_parse(data)
         parsed_completefeed.feed.uri = download_uri
         row_id = self._add_feed_to_database(parsed_completefeed.feed)
-        self._add_articles_to_database(parsed_completefeed.articles, row_id)
+
+        date_cutoff = (datetime.datetime.utcnow() - datetime.timedelta(minutes=self._time_limit)).isoformat()
+        self._add_articles_to_database(_filter_new_articles(parsed_completefeed.articles, date_cutoff, set()), row_id)
 
 
     def add_file_from_disk(self, location: str) -> None:
@@ -214,7 +216,7 @@ class FeedManager():
         self._feed_data_changed_function = call
 
 
-    def set_refresh_rate(self, feed: feedutility.Feed, rate: int) -> None:
+    def set_refresh_rate(self, feed: feedutility.Feed, rate: Union[int, None]) -> None:
         """
         Sets the refresh rate for an individual feed in the database, and sets/resets the scheduled refresh for that feed.
         """
@@ -224,15 +226,20 @@ class FeedManager():
 
         for f in self._individual_refresh_tracker:
             if f.feed.db_id == feed.db_id:
-                with self._schedule_lock:
+                if rate != None:
+                    with self._schedule_lock:
+                        f.feed.refresh_rate = rate
+                        self._refresh_schedule.cancel(f.scheduler_entry)
+                        f.scheduler_entry = self._refresh_schedule.enter(rate * 60, f.feed.db_id, self._scheduled_refresh, argument=[f])
+                        self._schedule_update_event.set()
+                else:
                     f.feed.refresh_rate = rate
-                    self._refresh_schedule.cancel(f.scheduler_entry)
-                    f.scheduler_entry = self._refresh_schedule.enter(rate * 10, f.feed.db_id, self._scheduled_refresh, argument=[f])
-                    self._schedule_update_event.set()
+                    self._individual_tracker_remove_item(feed)
                 break
         else:
             feed.refresh_rate = rate
-            self._individual_tracker_add_item(feed)
+            if rate != None:
+                self._individual_tracker_add_item(feed)
 
 
     def set_default_refresh_rate(self, rate: int) -> None:
@@ -242,8 +249,19 @@ class FeedManager():
         with self._schedule_lock:
             self._settings.settings["refresh_time"] = rate
             self._refresh_schedule.cancel(self._default_refresh_entry)
-            self._default_refresh_entry = self._refresh_schedule.enter(rate * 10, 0, self._scheduled_default_refresh)
+            self._default_refresh_entry = self._refresh_schedule.enter(rate * 60, 0, self._scheduled_default_refresh)
             self._schedule_update_event.set()
+
+
+    def set_feed_user_title(self, feed: feedutility.Feed, user_title: Union[str, None]) -> None:
+        """
+        Sets a user specified title for a feed.
+        """
+        c = self._connection.cursor()
+        c.execute('''UPDATE feeds SET user_title = ? WHERE rowid = ?''', [user_title, feed.db_id])
+        self._connection.commit()
+
+        feed.user_title = user_title
 
 
     def verify_feed_url(self, url: str) -> None:
@@ -266,6 +284,7 @@ class FeedManager():
         c.execute('''CREATE TABLE feeds (
             uri TEXT,
             title TEXT,
+            user_title TEXT,
             author TEXT,
             author_uri TEXT,
             category TEXT,
@@ -304,8 +323,8 @@ class FeedManager():
         Add a feed entry into the database. Returns the row id of the inserted entry.
         """
         c = self._connection.cursor()
-        c.execute('''INSERT INTO feeds VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
-            [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon_uri, feed.subtitle, feed.refresh_rate, json.dumps(feed.meta)])
+        c.execute('''INSERT INTO feeds VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
+            [feed.uri, feed.title, feed.user_title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon_uri, feed.subtitle, feed.refresh_rate, json.dumps(feed.meta)])
         self._connection.commit()
         return c.lastrowid
 
@@ -336,6 +355,7 @@ class FeedManager():
         c.execute('''UPDATE feeds SET
         uri = ?,
         title = ?,
+        user_title = ?,
         author = ?,
         author_uri = ?,
         category = ?,
@@ -344,7 +364,7 @@ class FeedManager():
         subtitle = ?,
         feed_meta = ? 
         WHERE rowid = ?''', 
-        [feed.uri, feed.title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon_uri, feed.subtitle, json.dumps(feed.meta), feed.db_id])
+        [feed.uri, feed.title, feed.user_title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon_uri, feed.subtitle, json.dumps(feed.meta), feed.db_id])
         self._connection.commit()
 
 
@@ -364,7 +384,7 @@ class FeedManager():
         print("refreshing ", refresh_entry.feed.title)
         with self._schedule_lock:
             self.refresh_feed(refresh_entry.feed)
-            refresh_entry.scheduler_entry = self._refresh_schedule.enter(refresh_entry.feed.refresh_rate * 10, refresh_entry.feed.db_id, self._scheduled_refresh, argument=[refresh_entry])
+            refresh_entry.scheduler_entry = self._refresh_schedule.enter(refresh_entry.feed.refresh_rate * 60, refresh_entry.feed.db_id, self._scheduled_refresh, argument=[refresh_entry])
             self._schedule_update_event.set()
 
     def _scheduled_default_refresh(self) -> None:
@@ -378,7 +398,7 @@ class FeedManager():
                 if feed.refresh_rate == None:
                     print("refreshing by default: ", feed.title)
                     self.refresh_feed(feed)
-            self._default_refresh_entry = self._refresh_schedule.enter(self._settings.settings["refresh_time"] * 10, 0, self._scheduled_default_refresh)
+            self._default_refresh_entry = self._refresh_schedule.enter(self._settings.settings["refresh_time"] * 60, 0, self._scheduled_default_refresh)
             self._schedule_update_event.set()
         
 
@@ -392,7 +412,7 @@ class FeedManager():
             if feed.refresh_rate != None:
                 self._individual_tracker_add_item(feed)
             
-        self._default_refresh_entry = self._refresh_schedule.enter(self._settings.settings["refresh_time"] * 10, 0, self._scheduled_default_refresh)
+        self._default_refresh_entry = self._refresh_schedule.enter(self._settings.settings["refresh_time"] * 60, 0, self._scheduled_default_refresh)
 
         threading.Thread(target=self._scheduler_thread, daemon=True).start()
 
@@ -404,7 +424,7 @@ class FeedManager():
         with self._schedule_lock:
             self._individual_refresh_tracker.append(_FeedRefresh(feed, None))
             obj = self._individual_refresh_tracker[-1]
-            obj.scheduler_entry = self._refresh_schedule.enter(feed.refresh_rate * 10, feed.db_id, self._scheduled_refresh, argument=[obj])
+            obj.scheduler_entry = self._refresh_schedule.enter(feed.refresh_rate * 60, feed.db_id, self._scheduled_refresh, argument=[obj])
             self._schedule_update_event.set()
 
 

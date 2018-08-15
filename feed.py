@@ -10,6 +10,7 @@ class Feed:
         self.db_id : int = None
         self.uri : str = None           # the id
         self.title : str = None
+        self.user_title : str = None
         self.author : str = None
         self.author_uri : str = None
         self.category : str = None

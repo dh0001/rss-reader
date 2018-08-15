@@ -136,7 +136,7 @@ class View():
         Called when the add feed button is pressed. Opens a dialog which allows inputting a new feed.
         """
 
-        dialog = GenericDialog(self.feed_manager.verify_feed_url, "Add Feed:", "Add Feed")
+        dialog = GenericDialog(self.feed_manager.verify_feed_url, "Add Feed:", "Add Feed", "")
         if (dialog.exec_() == qtw.QDialog.Accepted):
             self.feed_manager.add_feed_from_web(dialog.get_response())
             self.reset_screen()
@@ -231,16 +231,26 @@ class View():
             refresh = menu.addAction("Refresh Feed")
             delete = menu.addAction("Delete Feed")
             set_refresh_rate = menu.addAction("Set Refresh Rate")
+            set_custom_title = menu.addAction("Set Title")
             action = menu.exec_(self.feed_view.viewport().mapToGlobal(position))
 
             if action == delete:
-                self.button_delete(index.row())
+                response = qtw.QMessageBox.question(None, "Prompt", "Are you sure you want to delete '"+ self.feeds_cache[index.row()].title + "'?", qtw.QMessageBox.Yes | qtw.QMessageBox.No)
+                if response == qtw.QMessageBox.Yes:
+                    self.button_delete(index.row())
             elif action == refresh:
                 self.button_refresh(self.feeds_cache[index.row()])
             elif action == set_refresh_rate:
-                dialog = GenericDialog(lambda x: x.isdigit(), "Refresh Rate (minutes):", "Set Refresh Rate")
+                dialog = GenericDialog(lambda x: x.isdigit() or x == "", "Refresh Rate (minutes):", "Set Refresh Rate", str(self.feeds_cache[index.row()].refresh_rate))
                 if (dialog.exec_() == qtw.QDialog.Accepted):
-                    self.feed_manager.set_refresh_rate(self.feeds_cache[index.row()], int(dialog.get_response()))
+                    response = int(dialog.get_response()) if dialog.get_response() != "" else None
+                    self.feed_manager.set_refresh_rate(self.feeds_cache[index.row()], response)
+                    self.feed_model.update_row(index.row())
+            elif action == set_custom_title:
+                dialog = GenericDialog(lambda x: True, "Title:", "Set Title", self.feeds_cache[index.row()].user_title if self.feeds_cache[index.row()].user_title != None else self.feeds_cache[index.row()].title)
+                if (dialog.exec_() == qtw.QDialog.Accepted):
+                    response = dialog.get_response() if dialog.get_response() != "" else None
+                    self.feed_manager.set_feed_user_title(self.feeds_cache[index.row()], response)
                     self.feed_model.update_row(index.row())
 
     
@@ -387,7 +397,7 @@ class FeedModel(qtc.QAbstractItemModel):
             return 0
         return len(self.ar)
 
-    def add_feed(self, feed):
+    def add_feed(self, feed: feed.Feed):
         self.beginInsertRows(qtc.QModelIndex(), len(self.ar), 1)
         self.ar.append(feed)
         self.endInsertRows()
@@ -399,7 +409,6 @@ class FeedModel(qtc.QAbstractItemModel):
         self.beginRemoveRows(qtc.QModelIndex(), row, row)
         del self.ar[row]
         self.endRemoveRows()
-
 
     def index(self, in_row, in_column, in_parent=None):
         if not qtc.QAbstractItemModel.hasIndex(self, in_row, in_column):
@@ -417,9 +426,9 @@ class FeedModel(qtc.QAbstractItemModel):
             return None
         if role == qtc.Qt.DisplayRole:
             if in_index.column() == 0:
-                return self.ar[in_index.row()].title
+                return self.ar[in_index.row()].user_title if self.ar[in_index.row()].user_title != None else self.ar[in_index.row()].title
             if in_index.column() == 1:
-                return self.ar[in_index.row()].refresh_rate
+                return self.ar[in_index.row()].unread_count
         elif role == qtc.Qt.FontRole:
             if self.ar[in_index.row()].unread_count > 0:
                 f = qtg.QFont()
@@ -458,7 +467,7 @@ class FeedModel(qtc.QAbstractItemModel):
 
 class GenericDialog(qtw.QDialog):
 
-    def __init__(self, verify, prompt, window_title):
+    def __init__(self, verify, prompt, window_title, default_text):
         qtw.QDialog.__init__(self, None, qtc.Qt.WindowCloseButtonHint | qtc.Qt.WindowTitleHint)
 
         self.setObjectName(window_title)
@@ -469,6 +478,8 @@ class GenericDialog(qtw.QDialog):
         vbox.addWidget(qtw.QLabel(prompt), 0, 0, 1, 2)
 
         self.le = qtw.QLineEdit()
+        self.le.setText(default_text)
+        self.le.selectAll()
         vbox.addWidget(self.le, 1, 0, 1, 2)
 
         buttonBox = qtw.QDialogButtonBox(qtw.QDialogButtonBox.Ok | qtw.QDialogButtonBox.Cancel)
@@ -489,6 +500,7 @@ class GenericDialog(qtw.QDialog):
     def verify_response(self):
         
         self.error_label.setText("Verifying...")
+        self.error_label.repaint()
         if self.verify_function(self.le.text()):
             self.accept()
         else:
