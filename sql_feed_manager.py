@@ -9,15 +9,28 @@ import settings
 import json
 import datetime
 from typing import List, Union
+from PyQt5 import QtCore as qtc
+from sortedcontainers import SortedKeyList
 
 class _FeedRefresh():
     """
     Small class holding a feed, and its entry in the scheduler.
     """
-    __slots__ = 'feed', 'scheduler_entry'
-    def __init__(self, feed, scheduler_entry):
+    __slots__ = 'feed', 'scheduled_time'
+    def __init__(self, feed: feedutility.Feed, scheduled_time: float):
         self.feed : feedutility.Feed = feed
-        self.scheduler_entry : sched.Event = scheduler_entry
+        self.scheduled_time : float = scheduled_time
+
+
+
+class _DefaultFeedRefresh():
+    """
+    Small class to hold the time for default refresh.
+    """
+    __slots__ = 'scheduled_time', 'refresh_rate'
+    def __init__(self, refresh_rate: float, scheduled_time: float):
+        self.scheduled_time : float = scheduled_time
+        self.refresh_rate : float = refresh_rate
 
 
 class FeedManager():
@@ -33,13 +46,13 @@ class FeedManager():
         self._connection = sqlite3.connect(settings.settings["db_file"], check_same_thread=False)
         self._time_limit : int = self._settings.settings["default_delete_time"]
         self._schedule_lock : threading.Lock = threading.Lock()
-        self._refresh_schedule = sched.scheduler(time.time, time.sleep)
-        self._default_refresh_entry : sched.Event
-        self._individual_refresh_tracker : List[_FeedRefresh] = []
+        self._refresh_schedule : SortedKeyList
         self._new_feed_function : any = None
         self._new_article_function : any = None
         self._feed_data_changed_function : any = None
         self._schedule_update_event = threading.Event()
+        self._default_refresh_entry : _DefaultFeedRefresh
+        self._scheduler_thread : qtc.Thread
 
         if self._settings.settings["first-run"] == "true":
             self._create_tables()
@@ -50,8 +63,11 @@ class FeedManager():
 
     def cleanup(self) -> None:
         """
-        Should be called before program exit.
+        Should be called before program exit. Closes db connection and exits refresh thread gracefully.
         """
+        self._scheduler_thread.requestInterruption()
+        self._schedule_update_event.set()
+        self._scheduler_thread.wait()
         self._connection.close()
 
 
@@ -179,7 +195,7 @@ class FeedManager():
         tracker, if it has an individual refresh rate.
         """
         if feed.refresh_rate != None:
-            self._individual_tracker_remove_item(feed)
+            self._refresh_schedule_remove_item(feed)
 
         c = self._connection.cursor()
         c.execute('''DELETE FROM feeds WHERE rowid = ?''', [feed.db_id])
@@ -225,22 +241,16 @@ class FeedManager():
         c.execute('''UPDATE feeds SET refresh_rate = ? WHERE rowid = ?''', [rate, feed.db_id])
         self._connection.commit()
 
-        for f in self._individual_refresh_tracker:
-            if f.feed.db_id == feed.db_id:
-                if rate != None:
-                    with self._schedule_lock:
-                        f.feed.refresh_rate = rate
-                        self._refresh_schedule.cancel(f.scheduler_entry)
-                        f.scheduler_entry = self._refresh_schedule.enter(rate * 60, f.feed.db_id, self._scheduled_refresh, argument=[f])
-                        self._schedule_update_event.set()
-                else:
-                    f.feed.refresh_rate = rate
-                    self._individual_tracker_remove_item(feed)
-                break
-        else:
+        with self._schedule_lock:
             feed.refresh_rate = rate
+            i = next((i for i,v in enumerate(self._refresh_schedule) if v.feed.db_id == feed.db_id), None)
+            if i != None:
+                del self._refresh_schedule[i]
+
             if rate != None:
-                self._individual_tracker_add_item(feed)
+                self._refresh_schedule.add(_FeedRefresh(feed, time.time() + rate))
+                self._schedule_update_event.set()
+
 
 
     def set_default_refresh_rate(self, rate: int) -> None:
@@ -249,8 +259,7 @@ class FeedManager():
         """
         with self._schedule_lock:
             self._settings.settings["refresh_time"] = rate
-            self._refresh_schedule.cancel(self._default_refresh_entry)
-            self._default_refresh_entry = self._refresh_schedule.enter(rate * 60, 0, self._scheduled_default_refresh)
+            self._default_refresh_entry = _DefaultFeedRefresh(rate, time.time() + rate)
             self._schedule_update_event.set()
 
 
@@ -378,19 +387,18 @@ class FeedManager():
         self._connection.commit()
 
 
-    def _scheduled_refresh(self, refresh_entry: _FeedRefresh) -> None:
+    def _scheduled_refresh(self, feed: feedutility.Feed) -> None:
         """
-        Runs refresh_feed on the feed, then schedules another refresh.
+        Runs refresh_feed on the feed.
         """
-        print("refreshing ", refresh_entry.feed.title)
+        print("refreshing ", feed.title)
         with self._schedule_lock:
-            self.refresh_feed(refresh_entry.feed)
-            refresh_entry.scheduler_entry = self._refresh_schedule.enter(refresh_entry.feed.refresh_rate * 60, refresh_entry.feed.db_id, self._scheduled_refresh, argument=[refresh_entry])
-            self._schedule_update_event.set()
+            self.refresh_feed(feed)
+
 
     def _scheduled_default_refresh(self) -> None:
         """
-        Runs the scheduled refresh on feeds using the default refresh time, then schedules another refresh.
+        Runs the scheduled refresh on feeds using the default refresh time.
         """
         print("start default refresh")
         with self._schedule_lock:
@@ -399,61 +407,76 @@ class FeedManager():
                 if feed.refresh_rate == None:
                     print("refreshing by default: ", feed.title)
                     self.refresh_feed(feed)
-            self._default_refresh_entry = self._refresh_schedule.enter(self._settings.settings["refresh_time"] * 60, 0, self._scheduled_default_refresh)
-            self._schedule_update_event.set()
         
 
     def _start_refresh_schedule(self) -> None:
         """
         Populates individual_refresh_tracker and starts the refresh schedule.
         """
+
+        self._refresh_schedule = SortedKeyList(key=lambda x: x.scheduled_time)
         feeds = self.get_all_feeds()
 
         for feed in feeds:
             if feed.refresh_rate != None:
-                self._individual_tracker_add_item(feed)
+                self._refresh_schedule.add(_FeedRefresh(feed, time.time() + feed.refresh_rate))
             
-        self._default_refresh_entry = self._refresh_schedule.enter(self._settings.settings["refresh_time"] * 60, 0, self._scheduled_default_refresh)
+        self._default_refresh_entry = _DefaultFeedRefresh(self._settings.settings["refresh_time"], time.time() + self._settings.settings["refresh_time"])
 
-        threading.Thread(target=self._scheduler_thread, daemon=True).start()
+        self._scheduler_thread = SchedulerThread(self._refresh_schedule, self._schedule_update_event, self._default_refresh_entry, self._schedule_lock)
+        self._scheduler_thread.start()
+        self._scheduler_thread.scheduled_refresh_event.connect(self._scheduled_refresh)
+        self._scheduler_thread.scheduled_default_refresh_event.connect(self._scheduled_default_refresh)
 
 
-    def _individual_tracker_add_item(self, feed: feedutility.Feed) -> None:
+    def _refresh_schedule_remove_item(self, feed: feedutility.Feed) -> None:
         """
-        Adds an entry into the individual feed refresh tracker.
+        Removes an item from the refresh schedule.
         """
         with self._schedule_lock:
-            self._individual_refresh_tracker.append(_FeedRefresh(feed, None))
-            obj = self._individual_refresh_tracker[-1]
-            obj.scheduler_entry = self._refresh_schedule.enter(feed.refresh_rate * 60, feed.db_id, self._scheduled_refresh, argument=[obj])
+            i = next(i for i,v in enumerate(self._refresh_schedule) if v.feed.db_id == feed.db_id)
+            del self._refresh_schedule[i]
             self._schedule_update_event.set()
 
 
-    def _individual_tracker_remove_item(self, feed: feedutility.Feed) -> None:
-        """
-        Adds an entry into the individual feed tracker.
-        """
-        with self._schedule_lock:
-            index = 0
-            for f in self._individual_refresh_tracker:
-                if feed.db_id == f.feed.db_id:
-                    break
-                index += 1
-            else:
-                raise ValueError('Tried to remove from tracker, but it does not exist')
-        
-            self._refresh_schedule.cancel(self._individual_refresh_tracker[index].scheduler_entry)
-            del self._individual_refresh_tracker[index]
-            self._schedule_update_event.set()
-            
-    
-    def _scheduler_thread(self) -> None:
-        """
-        Runs in a separate thread. Starts the refreshes, and wakes when events change.
-        """
+
+
+class SchedulerThread(qtc.QThread):
+
+    scheduled_refresh_event = qtc.pyqtSignal(feedutility.Feed)
+    scheduled_default_refresh_event = qtc.pyqtSignal()
+
+    def __init__(self, scheduler: SortedKeyList, schedule_update_event: threading.Event, default_refresh: _DefaultFeedRefresh, schedule_lock: threading.Lock):
+        qtc.QThread.__init__(self)
+        self.abc = "abc"
+        self.scheduler = scheduler
+        self.schedule_updated_event = schedule_update_event
+        self.default_refresh = default_refresh
+        self.schedule_lock = schedule_lock
+
+    def run(self):
         while True:
-            self._schedule_update_event.wait(self._refresh_schedule.run(blocking=False))
-            self._schedule_update_event.clear()
+            if self.isInterruptionRequested():
+                return
+
+            with self.schedule_lock:
+                if len(self.scheduler) > 0 and self.scheduler[0].scheduled_time <= time.time():
+                    self.scheduled_refresh_event.emit(self.scheduler[0].feed)
+                    feed = self.scheduler[0].feed
+                    del self.scheduler[0]
+                    self.scheduler.add(_FeedRefresh(feed, time.time() + feed.refresh_rate))
+
+                elif self.default_refresh.scheduled_time <= time.time():
+                    self.scheduled_default_refresh_event.emit()
+                    self.default_refresh.scheduled_time = time.time() + self.default_refresh.refresh_rate
+
+            if len(self.scheduler) > 0:
+                next_time = min(self.scheduler[0].scheduled_time, self.default_refresh.scheduled_time)
+            else:
+                next_time = self.default_refresh.scheduled_time
+            self.schedule_updated_event.wait(next_time - time.time())
+            self.schedule_updated_event.clear()
+
 
 
     

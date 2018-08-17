@@ -6,36 +6,32 @@ import PyQt5.QtWidgets as qtw
 import PyQt5.QtCore as qtc
 import PyQt5.QtGui as qtg
 
-from typing import List
+from typing import List, Union
 
 
 class View():
 
-    def __init__(self, feed_mgr:sql_feed_manager.FeedManager, settings:settings.Settings):
+    def __init__(self, feed_mgr: sql_feed_manager.FeedManager, settings: settings.Settings):
         """
         initialization.
         """
+        self.main_window : qtw.QMainWindow
+        self.article_view : qtw.QTreeView
+        self.feed_view : qtw.QTreeView
+        self.content_view : qtw.QTextBrowser
+        self.feed_model : FeedModel
+        self.article_model : ArticleModel
+        self.splitter1 : qtw.QSplitter
+        self.splitter2 : qtw.QSplitter
+        self.app : qtw.QApplication
+
+        self.feeds_cache : List[feed.Feed]
+        self.articles_cache : List[feed.Article]
         self.feed_manager = feed_mgr
         self.feed_manager.set_article_notify(self.recieve_new_articles)
         self.feed_manager.set_feed_notify(self.recieve_new_feeds)
         self.feed_manager.set_feed_data_changed_notify(self.feed_data_changed)
         self.settings_manager = settings
-
-        self.feeds_cache : List[feed.Feed]
-        self.articles_cache : List[feed.Article]
-
-        self.main_window : qtw.QMainWindow
-        self.article_view : qtw.QTreeView
-        self.feed_view : qtw.QTreeView
-        self.content_view : qtw.QTextBrowser
-
-        self.feed_model : FeedModel
-        self.article_model : ArticleModel
-
-        self.splitter1 : qtw.QSplitter
-        self.splitter2 : qtw.QSplitter
-
-        self.app : qtw.QApplication
 
 
     def cleanup(self) -> None:
@@ -110,8 +106,8 @@ class View():
         self.article_view.header().restoreState(qtc.QByteArray.fromHex(bytes(self.settings_manager.settings["article_view_headers"], "utf-8")))
 
         self.output_feeds()
-        self.button_refresh_all()
         self.main_window.show()
+        self.button_refresh_all()
         self.app.exec_()
 
 
@@ -120,7 +116,6 @@ class View():
         Called when the refresh all button is pressed. Tells the feed manager to update all the feeds.
         """
         self.feed_manager.refresh_all()
-        self.feed_data_changed()
 
 
     def button_refresh(self, which) -> None:
@@ -128,7 +123,6 @@ class View():
         Called when a refresh button is pressed. Tells the feed manager to update the feed.
         """
         self.feed_manager.refresh_feed(which)
-        self.feed_data_changed()
 
 
     def button_add_feed(self) -> None:
@@ -241,7 +235,7 @@ class View():
             elif action == refresh:
                 self.button_refresh(self.feeds_cache[index.row()])
             elif action == set_refresh_rate:
-                dialog = GenericDialog(lambda x: x.isdigit() or x == "", "Refresh Rate (minutes):", "Set Refresh Rate", str(self.feeds_cache[index.row()].refresh_rate))
+                dialog = GenericDialog(lambda x: x.isdigit() or x == "", "Refresh Rate (seconds):", "Set Refresh Rate", str(self.feeds_cache[index.row()].refresh_rate))
                 if (dialog.exec_() == qtw.QDialog.Accepted):
                     response = int(dialog.get_response()) if dialog.get_response() != "" else None
                     self.feed_manager.set_refresh_rate(self.feeds_cache[index.row()], response)
@@ -278,6 +272,7 @@ class View():
             self.article_view.setSortingEnabled(False)
             self.article_model.add_articles(articles)
             self.article_view.setSortingEnabled(True)
+        self.feed_data_changed()
             
 
     def recieve_new_feeds(self, feeds: List[feed.Feed]) -> None:
@@ -297,13 +292,14 @@ class View():
 
 
 
+
 class ArticleModel(qtc.QAbstractItemModel):
     def __init__(self):
         """
         initialization.
         """
         qtc.QAbstractItemModel.__init__(self)
-        self.ar : List[feed.Article] = []
+        self.ar : List[Union[feed.Article, Node]] = []
 
     def rowCount(self, index: qtc.QModelIndex):
         """
@@ -312,14 +308,6 @@ class ArticleModel(qtc.QAbstractItemModel):
         if index.isValid():
             return 0
         return len(self.ar)
-
-    def add_articles(self, articles: List[feed.Article]):
-        """
-        Adds appends an article to the cache, while refreshing the view.
-        """
-        self.beginInsertRows(qtc.QModelIndex(), len(self.ar), len(articles))
-        self.ar += articles
-        self.endInsertRows()
 
     def index(self, in_row, in_column, in_parent=None):
         """
@@ -357,11 +345,6 @@ class ArticleModel(qtc.QAbstractItemModel):
             return f
         return None
 
-    def set_articles(self, articles) -> None:
-        self.beginResetModel()
-        self.ar = articles
-        self.endResetModel()
-
     def headerData(self, section, orientation, role=qtc.Qt.DisplayRole):
         if role == qtc.Qt.DisplayRole:
             if orientation == qtc.Qt.Horizontal: # Horizontal
@@ -382,8 +365,34 @@ class ArticleModel(qtc.QAbstractItemModel):
             self.ar.sort(key=lambda e: e.updated, reverse=order)
         self.endResetModel()
 
+    def add_articles(self, articles: List[feed.Article]):
+        """
+        Adds appends an article to the cache, while refreshing the view.
+        """
+        self.beginInsertRows(qtc.QModelIndex(), len(self.ar), len(articles))
+        self.ar += articles
+        self.endInsertRows()
+
+    def set_articles(self, articles) -> None:
+        self.beginResetModel()
+        self.ar = articles
+        self.endResetModel()
+
     def update_row_unread_status(self, row):
         self.dataChanged.emit(self.index(row, 0), self.index(row, 0), [qtc.Qt.FontRole])
+
+
+
+
+class Node():
+    def __init__(self, rowid: int, parent: int, title: str):
+        self.rowid = rowid
+        self.parent = parent
+        self.title = title
+        self.children = []
+        self.row = None
+        self.data = None
+
 
 
 
@@ -397,7 +406,7 @@ class FeedModel(qtc.QAbstractItemModel):
             return 0
         return len(self.ar)
 
-    def add_feed(self, feed: feed.Feed):
+    def add_feed(self, feed: feed.Feed, index: Union[None, qtc.QModelIndex]=None):
         self.beginInsertRows(qtc.QModelIndex(), len(self.ar), 1)
         self.ar.append(feed)
         self.endInsertRows()
@@ -417,6 +426,7 @@ class FeedModel(qtc.QAbstractItemModel):
 
     def parent(self, in_index):
         return qtc.QModelIndex()
+
 
     def columnCount(self, in_index):
         return 2
@@ -456,13 +466,15 @@ class FeedModel(qtc.QAbstractItemModel):
         if column == 1:
             self.ar.sort(key=lambda e: e.author, reverse=order)
         self.dataChanged.emit(qtc.QModelIndex(), qtc.QModelIndex())
-
+        
     def update_row(self, row: int):
         self.dataChanged.emit(self.index(row, 0), self.index(row, 1), [qtc.Qt.DisplayRole, qtc.Qt.FontRole])
 
     def update_data(self, feeds: List[feed.Feed]):
         self.ar = feeds
         self.dataChanged.emit(qtc.QModelIndex(), qtc.QModelIndex())
+
+
 
 
 class GenericDialog(qtw.QDialog):
@@ -505,7 +517,6 @@ class GenericDialog(qtw.QDialog):
             self.accept()
         else:
             self.error_label.setText("Verify Failed")
-
 
     def get_response(self):
         return self.le.text()
