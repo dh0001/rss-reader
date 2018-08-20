@@ -66,7 +66,6 @@ class View():
         self.feed_view.setRootIsDecorated(False)
         self.feed_view.setContextMenuPolicy(qtc.Qt.CustomContextMenu)
         self.feed_view.customContextMenuRequested.connect(self.feed_context_menu)
-        self.feed_view.setSortingEnabled(True)
         self.feed_view.header().setStretchLastSection(False)
         self.article_view = qtw.QTreeView()
         self.article_view.setModel(self.article_model)
@@ -106,8 +105,8 @@ class View():
         self.article_view.header().restoreState(qtc.QByteArray.fromHex(bytes(self.settings_manager.settings["article_view_headers"], "utf-8")))
 
         self.output_feeds()
-        self.main_window.show()
         self.button_refresh_all()
+        self.main_window.show()
         self.app.exec_()
 
 
@@ -269,9 +268,7 @@ class View():
         """
         current_index = self.feed_view.currentIndex()
         if current_index.isValid() and self.feeds_cache[current_index.row()].db_id == feed_id:
-            self.article_view.setSortingEnabled(False)
             self.article_model.add_articles(articles)
-            self.article_view.setSortingEnabled(True)
         self.feed_data_changed()
             
 
@@ -287,7 +284,6 @@ class View():
         """
         Updates feed information.
         """
-        self.feeds_cache = self.feed_manager.get_all_feeds()
         self.feed_model.update_data(self.feeds_cache)
 
 
@@ -299,7 +295,7 @@ class ArticleModel(qtc.QAbstractItemModel):
         initialization.
         """
         qtc.QAbstractItemModel.__init__(self)
-        self.ar : List[Union[feed.Article, Node]] = []
+        self.ar : List[feed.Article] = []
 
     def rowCount(self, index: qtc.QModelIndex):
         """
@@ -385,10 +381,8 @@ class ArticleModel(qtc.QAbstractItemModel):
 
 
 class Node():
-    def __init__(self, rowid: int, parent: int, title: str):
-        self.rowid = rowid
-        self.parent = parent
-        self.title = title
+    def __init__(self, folder : feed.Folder):
+        self.folder = folder
         self.children = []
         self.row = None
         self.data = None
@@ -399,7 +393,7 @@ class Node():
 class FeedModel(qtc.QAbstractItemModel):
     def __init__(self):
         qtc.QAbstractItemModel.__init__(self)
-        self.ar : List[feed.Feed] = []
+        self.ar : List[Union[feed.Feed, Node]] = []
 
     def rowCount(self, in_index):
         if in_index.isValid():
@@ -426,7 +420,6 @@ class FeedModel(qtc.QAbstractItemModel):
 
     def parent(self, in_index):
         return qtc.QModelIndex()
-
 
     def columnCount(self, in_index):
         return 2
@@ -459,14 +452,6 @@ class FeedModel(qtc.QAbstractItemModel):
                     1: "Unread"
                 }.get(section, None)
 
-    def sort(self, column, order=qtc.Qt.AscendingOrder):
-        order = True if order == qtc.Qt.AscendingOrder else False
-        if column == 0:
-            self.ar.sort(key=lambda e: e.title, reverse=order)
-        if column == 1:
-            self.ar.sort(key=lambda e: e.author, reverse=order)
-        self.dataChanged.emit(qtc.QModelIndex(), qtc.QModelIndex())
-        
     def update_row(self, row: int):
         self.dataChanged.emit(self.index(row, 0), self.index(row, 1), [qtc.Qt.DisplayRole, qtc.Qt.FontRole])
 

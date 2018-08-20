@@ -42,6 +42,16 @@ class Article:
         self.meta : dict = {}
 
 
+class Folder:
+    """
+    Class which holds information about folders.
+    """
+    def __init__(self, rowid: int, parent: int, title: str):
+        self.rowid = rowid
+        self.parent = parent
+        self.title = title
+
+
 CompleteFeed = NamedTuple('CompleteFeed', [('feed', Feed), ('articles', List[Article])])
 
 
@@ -52,7 +62,7 @@ def _article_append(append_to: CompleteFeed, entry) -> None:
     new_article = Article()
     for child in entry:
         tag = child.tag.split('}', 1)[1]
-        _article_substitute(new_article, child, article_mapping, tag)
+        _article_substitute(new_article, child, _article_mapping, tag)
     append_to.articles.append(new_article)
 
 
@@ -83,37 +93,6 @@ def _link_insert(to: Article, entry) -> None:
     to.uri = entry.attrib['href']
 
 
-feed_mapping = {
-    "id" : "uri",
-    "title" : "title",
-    "updated" : "updated",
-    "author" : _author_cf_insert,
-    "link" : None,
-    "category" : "category",
-    "contributor" : None,
-    "icon" : "icon",
-    "logo" : None,
-    "rights" : None,
-    "subtitle" : "subtitle",
-    "entry" : _article_append,
-}
-
-article_mapping = {
-    "id" : "identifier",
-    "title" : "title",
-    "updated" : "updated",
-    "author" : _author_insert,
-    "content" : "content",
-    "link" : _link_insert,
-    "summary" : None,
-    "category" : "category",
-    "contributor" : None,
-    "published" : "published",
-    "rights" : None,
-    "source" : None
-}
-
-
 def _feed_substitute(cf: CompleteFeed, value: any, dictionary: dict, key: str) -> None:
     """
     Substitutes the attribute with name corresponding in 'dict' in the feed portion of CompleteFeed 'cf' with 'value'.
@@ -138,6 +117,37 @@ def _article_substitute(obj: object, value: any, dictionary: dict, key: str) -> 
     #     obj.meta[key] = value
 
 
+_feed_mapping = {
+    "id" : "uri",
+    "title" : "title",
+    "updated" : "updated",
+    "author" : _author_insert,
+    "link" : None,
+    "category" : "category",
+    "contributor" : None,
+    "icon" : "icon",
+    "logo" : None,
+    "rights" : None,
+    "subtitle" : "subtitle",
+    "entry" : _article_append,
+}
+
+_article_mapping = {
+    "id" : "identifier",
+    "title" : "title",
+    "updated" : "updated",
+    "author" : _author_insert,
+    "content" : "content",
+    "link" : _link_insert,
+    "summary" : None,
+    "category" : "category",
+    "contributor" : None,
+    "published" : "published",
+    "rights" : None,
+    "source" : None
+}
+
+
 def atom_parse(parsed_xml) -> CompleteFeed:
     """
     Takes in parsed xml "parsed_xml" corresponding to an atom feed, and returns a CompleteFeed, containing the Feed and a list of Article.
@@ -148,5 +158,5 @@ def atom_parse(parsed_xml) -> CompleteFeed:
     
     for child in parsed_xml:
         tag = child.tag.split('}', 1)[1]
-        _feed_substitute(new_feed, child, feed_mapping, tag)
+        _feed_substitute(new_feed, child, _feed_mapping, tag)
     return new_feed
