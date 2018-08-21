@@ -16,7 +16,7 @@ from sortedcontainers import SortedKeyList
 
 class FeedManager():
     """
-    Manages the feeds in the application, and connections to the database.
+    Manages the feed objects, and connections to the database.
     """
 
     def __init__(self, settings: settings.Settings):
@@ -46,14 +46,14 @@ class FeedManager():
         self._feed_download_queue : List[str]
         self._feed_download_queue_updated_event = threading.Event()
 
-        self.cache_all_feeds()
+        self._cache_all_feeds()
         self._start_feed_download_thread()
         self._start_refresh_thread()
 
 
     def cleanup(self) -> None:
         """
-        Should be called before program exit. Closes db connection and exits refresh thread gracefully.
+        Should be called before program exit. Closes db connection and exits threads gracefully.
         """
         self._scheduler_thread.requestInterruption()
         self._schedule_update_event.set()
@@ -63,7 +63,7 @@ class FeedManager():
 
     def get_articles(self, feed_id: int) -> List[feedutility.Article]:
         """
-        Returns a list containing all the articles with feed_id "id".
+        Returns a list containing all the articles with passed feed_id.
         """
         c = self._connection.cursor()
         articles = []
@@ -91,35 +91,9 @@ class FeedManager():
         return self.feed_cache
 
 
-    def cache_all_feeds(self):
-        """
-        Returns a list containing all the feeds in the database.
-        """
-        c = self._connection.cursor()
-        feeds = []
-        for feed in c.execute('''SELECT * FROM feeds'''):
-            new_feed = feedutility.Feed()
-            new_feed.db_id = feed[0]
-            new_feed.parent_folder = feed[1]
-            new_feed.uri = feed[2]
-            new_feed.title = feed[3]
-            new_feed.user_title = feed[4]
-            new_feed.author = feed[5]
-            new_feed.author_uri = feed[6]
-            new_feed.category = feed[7]
-            new_feed.updated = feed[8]
-            new_feed.icon_uri = feed[9]
-            new_feed.subtitle = feed[10]
-            new_feed.refresh_rate = feed[11]
-            new_feed.meta = feed[12]
-            new_feed.unread_count = self._get_unread_articles_count(new_feed.db_id)
-            feeds.append(new_feed)
-        self.feed_cache = feeds
-
-
     def get_all_folders(self) -> List[feedutility.Folder]:
         """
-        Returns a list containing all the feeds in the database.
+        Returns a list containing all the folders in the database.
         """
         c = self._connection.cursor()
         folders : List[feedutility.Folder] = []
@@ -130,7 +104,7 @@ class FeedManager():
 
     def add_file_from_disk(self, location: str, folder: int=0) -> None:
         """
-        Add new feed to database from disk location.
+        Adds new feed to the database from disk location.
         """
         data = _load_rss_from_disk(location)
         self._add_feed(data, location, folder)
@@ -138,10 +112,26 @@ class FeedManager():
 
     def add_feed_from_web(self, download_uri: str, folder: int=0) -> None:
         """
-        Add new feed to database from web location.
+        Adds new feed to database from web location.
         """
         data = _download_xml(download_uri)
         self._add_feed(data, download_uri, folder)
+
+
+    def delete_feed(self, feed: feedutility.Feed) -> None:
+        """
+        Removes a feed with passed feed_id, and its articles from the database and cache. 
+        Removes its entry from the refresh schedule, if it exists.
+        """
+        if feed.refresh_rate != None:
+            self._refresh_schedule_remove_item(feed)
+
+        self.feed_cache.remove(feed)
+
+        c = self._connection.cursor()
+        c.execute('''DELETE FROM feeds WHERE id = ?''', [feed.db_id])
+        c.execute('''DELETE FROM articles WHERE feed_id = ?''', [feed.db_id])
+        self._connection.commit()
 
 
     def add_folder(self, folder_name: str, folder: int=0) -> None:
@@ -162,18 +152,10 @@ class FeedManager():
         self._connection.commit()
 
 
-    def _get_unread_articles_count(self, feed_id: int) -> int:
-        """
-        Return the number of unread articles for the feed with passed feed_id. Sql operation.
-        """
-        return self._connection.cursor().execute('''SELECT count(*) FROM articles WHERE unread = 1 AND feed_id = ?''', [feed_id]).fetchone()[0]
-    
-
     def refresh_all(self) -> None:
         """
-        Gets every feed from the database, then calls refresh_feed on all of them.
+        Calls refresh_feed on every feed in the cache.
         """
-        #print("refreshing.")
         for feed in self.feed_cache:
             self.refresh_feed(feed)
         date_cutoff = (datetime.datetime.utcnow() - datetime.timedelta(minutes=self._time_limit)).isoformat()
@@ -182,7 +164,8 @@ class FeedManager():
 
     def refresh_feed(self, feed: feedutility.Feed) -> None:
         """
-        Download a feed and updates the database with the new data. Also calls the new article function with a list of new articles.
+        Download a feed and updates the database and cache with the new data. 
+        Calls the new article function with a list of new articles.
         """
         try:
             new_completefeed = feedutility.atom_parse(_download_xml(feed.uri))
@@ -211,50 +194,13 @@ class FeedManager():
             self._new_article_function(new_articles, new_completefeed.feed.db_id)
 
 
-    def delete_feed(self, feed: feedutility.Feed) -> None:
-        """
-        Removes a feed with passed feed_id, and its articles from the database and cache. Also removes the feed from the refresh
-        tracker, if it has an individual refresh rate.
-        """
-        if feed.refresh_rate != None:
-            self._refresh_schedule_remove_item(feed)
-
-        self.feed_cache.remove(feed)
-
-        c = self._connection.cursor()
-        c.execute('''DELETE FROM feeds WHERE id = ?''', [feed.db_id])
-        c.execute('''DELETE FROM articles WHERE feed_id = ?''', [feed.db_id])
-        self._connection.commit()
-
-
     def set_article_unread_status(self, article_id: int, status: bool) -> None:
         """
-        Changes the unread column in the database for passed article_id.
+        Sets the unread status in the database for passed article_id.
         """
         c = self._connection.cursor()
         c.execute('''UPDATE articles SET unread = ? WHERE rowid = ?''', [status, article_id])
         self._connection.commit()
-
-
-    def set_feed_notify(self, call: any) -> None:
-        """
-        Tells the feed manager to run the passed function when feed information changes. Passes a list of feed.
-        """
-        self._new_feed_function = call
-
-
-    def set_article_notify(self, call: any) -> None:
-        """
-        Tells the feed manager to run the passed function when article information changes. Passes a list of article.
-        """
-        self._new_article_function = call
-
-    
-    def set_feed_data_changed_notify(self, call: any) -> None:
-        """
-        Tells the feed manager to run the passed function when feed information changes. Passes a list of feed.
-        """
-        self._feed_data_changed_function = call
 
 
     def set_refresh_rate(self, feed: feedutility.Feed, rate: Union[int, None]) -> None:
@@ -276,17 +222,6 @@ class FeedManager():
                 self._schedule_update_event.set()
 
 
-
-    def set_default_refresh_rate(self, rate: int) -> None:
-        """
-        Sets the default refresh rate for feeds and resets the scheduled default refresh.
-        """
-        with self._schedule_lock:
-            self._settings.settings["refresh_time"] = rate
-            self._default_refresh_entry = _DefaultFeedRefresh(rate, time.time() + rate)
-            self._schedule_update_event.set()
-
-
     def set_feed_user_title(self, feed: feedutility.Feed, user_title: Union[str, None]) -> None:
         """
         Sets a user specified title for a feed.
@@ -296,6 +231,16 @@ class FeedManager():
         self._connection.commit()
 
         feed.user_title = user_title
+
+
+    def set_default_refresh_rate(self, rate: int) -> None:
+        """
+        Sets the default refresh rate for feeds and resets the scheduled default refresh.
+        """
+        with self._schedule_lock:
+            self._settings.settings["refresh_time"] = rate
+            self._default_refresh_entry = _DefaultFeedRefresh(rate, time.time() + rate)
+            self._schedule_update_event.set()
 
 
     def verify_feed_url(self, url: str) -> None:
@@ -308,6 +253,27 @@ class FeedManager():
         except Exception:
             pass
         return False
+
+
+    def set_feed_notify(self, call: any) -> None:
+        """
+        Tells the feed manager to run the passed function when feed information changes. Passes a list of feed.
+        """
+        self._new_feed_function = call
+
+
+    def set_article_notify(self, call: any) -> None:
+        """
+        Tells the feed manager to run the passed function when article information changes. Passes a list of article.
+        """
+        self._new_article_function = call
+
+    
+    def set_feed_data_changed_notify(self, call: any) -> None:
+        """
+        Tells the feed manager to run the passed function when feed information changes. Passes a list of feed.
+        """
+        self._feed_data_changed_function = call
 
 
     def _create_tables(self) -> None:
@@ -346,6 +312,39 @@ class FeedManager():
             name TEXT)''')
         self._connection.commit()
 
+
+    def _cache_all_feeds(self):
+        """
+        Returns a list containing all the feeds in the database.
+        """
+        c = self._connection.cursor()
+        feeds = []
+        for feed in c.execute('''SELECT * FROM feeds'''):
+            new_feed = feedutility.Feed()
+            new_feed.db_id = feed[0]
+            new_feed.parent_folder = feed[1]
+            new_feed.uri = feed[2]
+            new_feed.title = feed[3]
+            new_feed.user_title = feed[4]
+            new_feed.author = feed[5]
+            new_feed.author_uri = feed[6]
+            new_feed.category = feed[7]
+            new_feed.updated = feed[8]
+            new_feed.icon_uri = feed[9]
+            new_feed.subtitle = feed[10]
+            new_feed.refresh_rate = feed[11]
+            new_feed.meta = feed[12]
+            new_feed.unread_count = self._get_unread_articles_count(new_feed.db_id)
+            feeds.append(new_feed)
+        self.feed_cache = feeds
+
+
+    def _get_unread_articles_count(self, feed_id: int) -> int:
+        """
+        Return the number of unread articles for the feed with passed feed_id. Sql operation.
+        """
+        return self._connection.cursor().execute('''SELECT count(*) FROM articles WHERE unread = 1 AND feed_id = ?''', [feed_id]).fetchone()[0]
+    
 
     def _get_article_identifiers(self, feed_id: int) -> set:
         """

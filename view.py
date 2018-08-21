@@ -23,7 +23,6 @@ class View():
         self.article_model : ArticleModel
         self.splitter1 : qtw.QSplitter
         self.splitter2 : qtw.QSplitter
-        self.app : qtw.QApplication
 
         self.feeds_cache : List[feedutility.Feed]
         self.articles_cache : List[feedutility.Article]
@@ -92,9 +91,9 @@ class View():
         main_widget.setLayout(hbox)
 
         menu_bar = self.main_window.menuBar().addMenu('Options')
-        menu_bar.addAction("Add feed...").triggered.connect(self.button_add_feed)
-        menu_bar.addAction("Add folder...").triggered.connect(self.button_add_folder)
-        menu_bar.addAction("Force Update Feeds").triggered.connect(self.button_refresh_all)
+        menu_bar.addAction("Add feed...").triggered.connect(self.prompt_add_feed)
+        menu_bar.addAction("Add folder...").triggered.connect(self.prompt_add_folder)
+        menu_bar.addAction("Force Update Feeds").triggered.connect(self.refresh_all)
         menu_bar.addAction("Refresh Caches").triggered.connect(self.reset_screen)
         menu_bar.addSeparator()
         menu_bar.addAction("Exit").triggered.connect(qtc.QCoreApplication.quit)
@@ -111,23 +110,11 @@ class View():
         self.app.exec_()
 
 
-    def button_refresh_all(self, which=None) -> None:
+    def prompt_add_feed(self, index: qtc.QModelIndex=None) -> None:
         """
-        Called when the refresh all button is pressed. Tells the feed manager to update all the feeds.
-        """
-        self.feed_manager.refresh_all()
-
-
-    def button_refresh(self, feed: feedutility.Feed) -> None:
-        """
-        Called when a refresh button is pressed. Tells the feed manager to update the feed.
-        """
-        self.feed_manager.refresh_feed(feed)
-
-
-    def button_add_feed(self, index: qtc.QModelIndex=None) -> None:
-        """
+        Opens a dialog allowing a user to enter a url for a new feed.
         Called when the add feed button is pressed. Opens a dialog which allows inputting a new feed.
+        Resets the screen.
         """
         dialog = GenericDialog(self.feed_manager.verify_feed_url, "Add Feed:", "Add Feed", "")
         if (dialog.exec_() == qtw.QDialog.Accepted):
@@ -135,31 +122,29 @@ class View():
                 folder = index.internalPointer().folder.db_id
             else:
                 folder = 0
-
             self.feed_manager.add_feed_from_web(dialog.get_response(), folder)
             self.reset_screen()
-        # inputDialog = qtw.QInputDialog(None, qtc.Qt.WindowSystemMenuHint | qtc.Qt.WindowTitleHint)
-        # inputDialog.setWindowTitle("Add Feed")
-        # inputDialog.setLabelText("Feed Url:")
-        # inputDialog.show()
-        # if (inputDialog.exec_() == qtw.QDialog.Accepted):
-        #     self.feed_manager.add_feed_from_web(inputDialog.textValue())
-        #     self.reset_screen()
 
 
-    def button_delete_feed(self, index: qtc.QModelIndex) -> None:
+    def prompt_delete_feed(self, index: qtc.QModelIndex) -> None:
         """
-        Deletes a feed from the view then tells the feed manager to remove it from the database, then resets the screen.
+        Opens a message box prompt which confirms if the user wants to delete a feed.
+        Deletes a feed from the view, then tells the feed manager to remove it from the database.
+        Resets the screen.
         """
         feed = index.internalPointer().data
-        self.feed_model.remove_feed(index)
-        self.feed_manager.delete_feed(feed)
-        self.reset_screen()
+        response = qtw.QMessageBox.question(None, "Prompt", "Are you sure you want to delete '" + feed.user_title if feed.user_title != None else feed.title + "'?", qtw.QMessageBox.Yes | qtw.QMessageBox.No)
+        if response == qtw.QMessageBox.Yes:
+            self.feed_model.remove_feed(index)
+            self.feed_manager.delete_feed(feed)
+            self.reset_screen()
 
 
-    def button_add_folder(self, index: qtc.QModelIndex=None) -> None:
+    def prompt_add_folder(self, index: qtc.QModelIndex=None) -> None:
         """
-        Adds a folder to the feed database, then resets the screen.
+        Opens a dialog allowing a user to enter a name for a new folder.
+        Adds a folder to the feed database, with the passed index as a parent.
+        Resets the screen.
         """
         dialog = GenericDialog(lambda x: True, "Add Folder:", "Add Folder", "")
         if (dialog.exec_() == qtw.QDialog.Accepted):
@@ -171,13 +156,112 @@ class View():
             self.reset_screen()
 
 
-    def button_delete_folder(self, index: qtc.QModelIndex) -> None:
+    def prompt_delete_folder(self, index: qtc.QModelIndex) -> None:
         """
-        Deletes a folder from the view then tells the feed manager to remove it from the database, then resets the screen.
+        Opens a message box prompt which confirms if the user wants to delete a folder.
+        Deletes the folder from the view then tells the feed manager to remove it from the database.
+        Resets the screen.
         """
         folder = index.internalPointer().folder
-        self.feed_manager.delete_folder(folder)
-        self.reset_screen()
+        response = qtw.QMessageBox.question(None, "Prompt", "Are you sure you want to delete '"+ folder.title + "'?", qtw.QMessageBox.Yes | qtw.QMessageBox.No)
+        if response == qtw.QMessageBox.Yes:
+            self.feed_manager.delete_folder(folder)
+            self.reset_screen()
+
+
+    def prompt_set_user_custom_title(self, index: qtc.QModelIndex) -> None:
+        """
+        Opens a dialog which allows the user to enter a custom title for a feed.
+        Tells the feed manager to set the custom name of the feed in the database.
+        Tells the view to update the row of the passed index.
+        """
+        feed = index.internalPointer().data
+        dialog = GenericDialog(lambda x: True, "Title:", "Set Title", feed.user_title if feed.user_title != None else feed.title)
+        if (dialog.exec_() == qtw.QDialog.Accepted):
+            response = dialog.get_response() if dialog.get_response() != "" else None
+            self.feed_manager.set_feed_user_title(feed, response)
+            self.feed_model.update_row(index)
+
+        
+    def prompt_set_feed_refresh_rate(self, index: qtc.QModelIndex) -> None:
+        """
+        Opens a dialog which allows the user to set a feed's refresh rate.
+        Tells the feed manager to set the refresh rate of the feed in the database.
+        Tells the view to update the row of the passed index.
+        """
+        feed = index.internalPointer().data
+        dialog = GenericDialog(lambda x: x.isdigit() or x == "", "Refresh Rate (seconds):", "Set Refresh Rate", str(feed.refresh_rate))
+        if (dialog.exec_() == qtw.QDialog.Accepted):
+            response = int(dialog.get_response()) if dialog.get_response() != "" else None
+            self.feed_manager.set_refresh_rate(feed, response)
+            self.feed_model.update_row(index)
+
+
+    def feed_context_menu(self, position) -> None:
+        """
+        Outputs the context menu for items in the feed view.
+        """
+        index = self.feed_view.indexAt(position)
+        
+        if index.isValid():
+            node = index.internalPointer()
+            menu = qtw.QMenu()
+
+            if node.data:
+                refresh = menu.addAction("Refresh Feed")
+                delete = menu.addAction("Delete Feed")
+                set_refresh_rate = menu.addAction("Set Refresh Rate")
+                set_custom_title = menu.addAction("Set Title")
+                action = menu.exec_(self.feed_view.viewport().mapToGlobal(position))
+                if action == delete:
+                    self.prompt_delete_feed(index)
+                elif action == refresh:
+                    self.refresh_single(node.data)
+                elif action == set_refresh_rate:
+                    self.prompt_set_feed_refresh_rate(index)
+                elif action == set_custom_title:
+                    self.prompt_set_user_custom_title(index)
+
+            else:
+                add_feed = menu.addAction("Add Feed")
+                add_folder = menu.addAction("Add Folder")
+                delete_folder = menu.addAction("Delete Folder")
+                action = menu.exec_(self.feed_view.viewport().mapToGlobal(position))
+                if action == add_feed:
+                    self.prompt_add_feed(index)
+                elif action == add_folder:
+                    self.prompt_add_folder(index)
+                elif action == delete_folder:
+                    self.prompt_delete_folder(index)
+
+    
+    def article_context_menu(self, position) -> None:
+        """
+        Outputs the context menu for items in the article view.
+        """
+        index = self.feed_view.indexAt(position)
+        
+        if index.isValid():
+            menu = qtw.QMenu()
+            delete_action = menu.addAction("Mark")
+            action = menu.exec_(self.feed_view.viewport().mapToGlobal(position))
+
+            if action == delete_action:
+                self.prompt_delete_feed(index)
+
+
+    def refresh_all(self) -> None:
+        """
+        Called when the refresh all button is pressed. Tells the feed manager to update all the feeds.
+        """
+        self.feed_manager.refresh_all()
+
+
+    def refresh_single(self, feed: feedutility.Feed) -> None:
+        """
+        Called when a refresh button is pressed. Tells the feed manager to update the feed.
+        """
+        self.feed_manager.refresh_feed(feed)
 
 
     def reset_screen(self) -> None:
@@ -199,7 +283,7 @@ class View():
 
     def output_articles(self) -> None:
         """
-        Gets highlighted feed in feeds_view, then outputs the articles from those feeds into the articles_view.
+        Outputs the articles of the highlighted feed in the articles_view.
         """
         index = self.feed_view.currentIndex()
         self.articles_cache = []
@@ -233,7 +317,8 @@ class View():
 
     def mark_article_read(self, row: int, article_id: int) -> None:
         """
-        Tells the feed manager to mark as read in the db and remove BoldRole from the row.
+        Tells the feed manager to mark as read in the db.
+        Decrements the currently highlighted feed's unread count by 1.
         """
         self.feed_manager.set_article_unread_status(article_id, False)
         self.articles_cache[row].unread = False
@@ -242,81 +327,13 @@ class View():
         self.feed_model.update_row(self.feed_view.currentIndex())
 
 
-    def feed_context_menu(self, position) -> None:
-        """
-        Outputs the context menu for items in the feed view.
-        """
-        index = self.feed_view.indexAt(position)
-        
-        if index.isValid():
-            node = index.internalPointer()
-
-            if node.data:
-                menu = qtw.QMenu()
-                refresh = menu.addAction("Refresh Feed")
-                delete = menu.addAction("Delete Feed")
-                set_refresh_rate = menu.addAction("Set Refresh Rate")
-                set_custom_title = menu.addAction("Set Title")
-                action = menu.exec_(self.feed_view.viewport().mapToGlobal(position))
-
-                if action == delete:
-                    response = qtw.QMessageBox.question(None, "Prompt", "Are you sure you want to delete '"+ node.data.title + "'?", qtw.QMessageBox.Yes | qtw.QMessageBox.No)
-                    if response == qtw.QMessageBox.Yes:
-                        self.button_delete_feed(index)
-                elif action == refresh:
-                    self.button_refresh(node.data)
-                elif action == set_refresh_rate:
-                    dialog = GenericDialog(lambda x: x.isdigit() or x == "", "Refresh Rate (seconds):", "Set Refresh Rate", str(node.data.refresh_rate))
-                    if (dialog.exec_() == qtw.QDialog.Accepted):
-                        response = int(dialog.get_response()) if dialog.get_response() != "" else None
-                        self.feed_manager.set_refresh_rate(self.feeds_cache[index.row()], response)
-                        self.feed_model.update_row(index)
-                elif action == set_custom_title:
-                    dialog = GenericDialog(lambda x: True, "Title:", "Set Title", self.feeds_cache[index.row()].user_title if self.feeds_cache[index.row()].user_title != None else self.feeds_cache[index.row()].title)
-                    if (dialog.exec_() == qtw.QDialog.Accepted):
-                        response = dialog.get_response() if dialog.get_response() != "" else None
-                        self.feed_manager.set_feed_user_title(self.feeds_cache[index.row()], response)
-                        self.feed_model.update_row(index)
-            
-            else:
-                menu = qtw.QMenu()
-                add_feed = menu.addAction("Add Feed")
-                add_folder = menu.addAction("Add Folder")
-                delete_folder = menu.addAction("Delete Folder")
-                action = menu.exec_(self.feed_view.viewport().mapToGlobal(position))
-
-                if action == add_feed:
-                    self.button_add_feed(index)
-                elif action == add_folder:
-                    self.button_add_folder(index)
-                elif action == delete_folder:
-                    response = qtw.QMessageBox.question(None, "Prompt", "Are you sure you want to delete '"+ node.folder.title + "'?", qtw.QMessageBox.Yes | qtw.QMessageBox.No)
-                    if response == qtw.QMessageBox.Yes:
-                        self.button_delete_feed(index)
-
-
-    
-    def article_context_menu(self, position) -> None:
-        """
-        Outputs the context menu for items in the article view.
-        """
-        index = self.feed_view.indexAt(position)
-        
-        if index.isValid():
-            menu = qtw.QMenu()
-            delete_action = menu.addAction("Mark")
-            action = menu.exec_(self.feed_view.viewport().mapToGlobal(position))
-
-            if action == delete_action:
-                self.button_delete_feed(index)
-
-
     def recieve_new_articles(self, articles: List[feedutility.Article], feed_id: int) -> None:
         """
-        Recieves new article data from the feed manager and adds them to the views.
+        Recieves new article data from the feed manager and adds them to the views,
+        if the currently highlighted feed is the correct feed.
         """
         current_index = self.feed_view.currentIndex()
-        if current_index.isValid() and self.feeds_cache[current_index.row()].db_id == feed_id:
+        if current_index.isValid() and current_index.internalPointer().data.db_id == feed_id:
             self.article_model.add_articles(articles)
         self.feed_data_changed()
             
