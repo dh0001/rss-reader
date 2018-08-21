@@ -1,4 +1,4 @@
-import feed
+import feed as feedutility
 import sql_feed_manager
 import settings
 
@@ -25,8 +25,8 @@ class View():
         self.splitter2 : qtw.QSplitter
         self.app : qtw.QApplication
 
-        self.feeds_cache : List[feed.Feed]
-        self.articles_cache : List[feed.Article]
+        self.feeds_cache : List[feedutility.Feed]
+        self.articles_cache : List[feedutility.Article]
         self.feed_manager = feed_mgr
         self.feed_manager.set_article_notify(self.recieve_new_articles)
         self.feed_manager.set_feed_notify(self.recieve_new_feeds)
@@ -63,7 +63,7 @@ class View():
 
         self.feed_view = qtw.QTreeView()
         self.feed_view.setModel(self.feed_model)
-        self.feed_view.setRootIsDecorated(False)
+        #self.feed_view.setRootIsDecorated(False)
         self.feed_view.setContextMenuPolicy(qtc.Qt.CustomContextMenu)
         self.feed_view.customContextMenuRequested.connect(self.feed_context_menu)
         self.feed_view.header().setStretchLastSection(False)
@@ -92,7 +92,8 @@ class View():
         main_widget.setLayout(hbox)
 
         menu_bar = self.main_window.menuBar().addMenu('Options')
-        menu_bar.addAction("Add Feed...").triggered.connect(self.button_add_feed)
+        menu_bar.addAction("Add feed...").triggered.connect(self.button_add_feed)
+        menu_bar.addAction("Add folder...").triggered.connect(self.button_add_folder)
         menu_bar.addAction("Force Update Feeds").triggered.connect(self.button_refresh_all)
         menu_bar.addAction("Refresh Caches").triggered.connect(self.reset_screen)
         menu_bar.addSeparator()
@@ -105,7 +106,7 @@ class View():
         self.article_view.header().restoreState(qtc.QByteArray.fromHex(bytes(self.settings_manager.settings["article_view_headers"], "utf-8")))
 
         self.output_feeds()
-        self.button_refresh_all()
+        #self.button_refresh_all()
         self.main_window.show()
         self.app.exec_()
 
@@ -117,21 +118,25 @@ class View():
         self.feed_manager.refresh_all()
 
 
-    def button_refresh(self, which) -> None:
+    def button_refresh(self, feed: feedutility.Feed) -> None:
         """
         Called when a refresh button is pressed. Tells the feed manager to update the feed.
         """
-        self.feed_manager.refresh_feed(which)
+        self.feed_manager.refresh_feed(feed)
 
 
-    def button_add_feed(self) -> None:
+    def button_add_feed(self, index: qtc.QModelIndex=None) -> None:
         """
         Called when the add feed button is pressed. Opens a dialog which allows inputting a new feed.
         """
-
         dialog = GenericDialog(self.feed_manager.verify_feed_url, "Add Feed:", "Add Feed", "")
         if (dialog.exec_() == qtw.QDialog.Accepted):
-            self.feed_manager.add_feed_from_web(dialog.get_response())
+            if index:
+                folder = index.internalPointer().folder.db_id
+            else:
+                folder = 0
+
+            self.feed_manager.add_feed_from_web(dialog.get_response(), folder)
             self.reset_screen()
         # inputDialog = qtw.QInputDialog(None, qtc.Qt.WindowSystemMenuHint | qtc.Qt.WindowTitleHint)
         # inputDialog.setWindowTitle("Add Feed")
@@ -142,13 +147,36 @@ class View():
         #     self.reset_screen()
 
 
-    def button_delete(self, row: int) -> None:
+    def button_delete_feed(self, index: qtc.QModelIndex) -> None:
         """
-        Called when the delete button is pressed. Deletes the feed from the view then tells the feed manager
-        to remove it from the database.
+        Deletes a feed from the view then tells the feed manager to remove it from the database, then resets the screen.
         """
-        self.feed_manager.delete_feed(self.feeds_cache[row])
-        self.feed_model.remove_feed(row)
+        feed = index.internalPointer().data
+        self.feed_model.remove_feed(index)
+        self.feed_manager.delete_feed(feed)
+        self.reset_screen()
+
+
+    def button_add_folder(self, index: qtc.QModelIndex=None) -> None:
+        """
+        Adds a folder to the feed database, then resets the screen.
+        """
+        dialog = GenericDialog(lambda x: True, "Add Folder:", "Add Folder", "")
+        if (dialog.exec_() == qtw.QDialog.Accepted):
+            if index:
+                folder = index.internalPointer().folder.db_id
+            else:
+                folder = 0
+            self.feed_manager.add_folder(dialog.get_response(), folder)
+            self.reset_screen()
+
+
+    def button_delete_folder(self, index: qtc.QModelIndex) -> None:
+        """
+        Deletes a folder from the view then tells the feed manager to remove it from the database, then resets the screen.
+        """
+        folder = index.internalPointer().folder
+        self.feed_manager.delete_folder(folder)
         self.reset_screen()
 
 
@@ -166,7 +194,7 @@ class View():
         Repopulates the feed view.
         """
         self.feeds_cache = self.feed_manager.get_all_feeds()
-        self.feed_model.set_feeds(self.feeds_cache)
+        self.feed_model.set_feeds(self.feeds_cache, self.feed_manager.get_all_folders())
 
 
     def output_articles(self) -> None:
@@ -174,11 +202,12 @@ class View():
         Gets highlighted feed in feeds_view, then outputs the articles from those feeds into the articles_view.
         """
         index = self.feed_view.currentIndex()
+        self.articles_cache = []
         if index.isValid():
-            db_id = self.feeds_cache[index.row()].db_id
-            self.articles_cache = self.feed_manager.get_articles(db_id)
-        else:
-            self.articles_cache = []
+            node = index.internalPointer()
+            if node.data != None:
+                self.articles_cache = self.feed_manager.get_articles(node.data.db_id)
+            
 
         self.article_view.setSortingEnabled(False)
         self.article_model.set_articles(self.articles_cache)
@@ -209,8 +238,8 @@ class View():
         self.feed_manager.set_article_unread_status(article_id, False)
         self.articles_cache[row].unread = False
         self.article_model.update_row_unread_status(row)
-        self.feeds_cache[self.feed_view.currentIndex().row()].unread_count -= 1
-        self.feed_model.update_row(self.feed_view.currentIndex().row())
+        self.feed_view.currentIndex().internalPointer().data.unread_count -= 1
+        self.feed_model.update_row(self.feed_view.currentIndex())
 
 
     def feed_context_menu(self, position) -> None:
@@ -220,31 +249,51 @@ class View():
         index = self.feed_view.indexAt(position)
         
         if index.isValid():
-            menu = qtw.QMenu()
-            refresh = menu.addAction("Refresh Feed")
-            delete = menu.addAction("Delete Feed")
-            set_refresh_rate = menu.addAction("Set Refresh Rate")
-            set_custom_title = menu.addAction("Set Title")
-            action = menu.exec_(self.feed_view.viewport().mapToGlobal(position))
+            node = index.internalPointer()
 
-            if action == delete:
-                response = qtw.QMessageBox.question(None, "Prompt", "Are you sure you want to delete '"+ self.feeds_cache[index.row()].title + "'?", qtw.QMessageBox.Yes | qtw.QMessageBox.No)
-                if response == qtw.QMessageBox.Yes:
-                    self.button_delete(index.row())
-            elif action == refresh:
-                self.button_refresh(self.feeds_cache[index.row()])
-            elif action == set_refresh_rate:
-                dialog = GenericDialog(lambda x: x.isdigit() or x == "", "Refresh Rate (seconds):", "Set Refresh Rate", str(self.feeds_cache[index.row()].refresh_rate))
-                if (dialog.exec_() == qtw.QDialog.Accepted):
-                    response = int(dialog.get_response()) if dialog.get_response() != "" else None
-                    self.feed_manager.set_refresh_rate(self.feeds_cache[index.row()], response)
-                    self.feed_model.update_row(index.row())
-            elif action == set_custom_title:
-                dialog = GenericDialog(lambda x: True, "Title:", "Set Title", self.feeds_cache[index.row()].user_title if self.feeds_cache[index.row()].user_title != None else self.feeds_cache[index.row()].title)
-                if (dialog.exec_() == qtw.QDialog.Accepted):
-                    response = dialog.get_response() if dialog.get_response() != "" else None
-                    self.feed_manager.set_feed_user_title(self.feeds_cache[index.row()], response)
-                    self.feed_model.update_row(index.row())
+            if node.data:
+                menu = qtw.QMenu()
+                refresh = menu.addAction("Refresh Feed")
+                delete = menu.addAction("Delete Feed")
+                set_refresh_rate = menu.addAction("Set Refresh Rate")
+                set_custom_title = menu.addAction("Set Title")
+                action = menu.exec_(self.feed_view.viewport().mapToGlobal(position))
+
+                if action == delete:
+                    response = qtw.QMessageBox.question(None, "Prompt", "Are you sure you want to delete '"+ node.data.title + "'?", qtw.QMessageBox.Yes | qtw.QMessageBox.No)
+                    if response == qtw.QMessageBox.Yes:
+                        self.button_delete_feed(index)
+                elif action == refresh:
+                    self.button_refresh(node.data)
+                elif action == set_refresh_rate:
+                    dialog = GenericDialog(lambda x: x.isdigit() or x == "", "Refresh Rate (seconds):", "Set Refresh Rate", str(node.data.refresh_rate))
+                    if (dialog.exec_() == qtw.QDialog.Accepted):
+                        response = int(dialog.get_response()) if dialog.get_response() != "" else None
+                        self.feed_manager.set_refresh_rate(self.feeds_cache[index.row()], response)
+                        self.feed_model.update_row(index)
+                elif action == set_custom_title:
+                    dialog = GenericDialog(lambda x: True, "Title:", "Set Title", self.feeds_cache[index.row()].user_title if self.feeds_cache[index.row()].user_title != None else self.feeds_cache[index.row()].title)
+                    if (dialog.exec_() == qtw.QDialog.Accepted):
+                        response = dialog.get_response() if dialog.get_response() != "" else None
+                        self.feed_manager.set_feed_user_title(self.feeds_cache[index.row()], response)
+                        self.feed_model.update_row(index)
+            
+            else:
+                menu = qtw.QMenu()
+                add_feed = menu.addAction("Add Feed")
+                add_folder = menu.addAction("Add Folder")
+                delete_folder = menu.addAction("Delete Folder")
+                action = menu.exec_(self.feed_view.viewport().mapToGlobal(position))
+
+                if action == add_feed:
+                    self.button_add_feed(index)
+                elif action == add_folder:
+                    self.button_add_folder(index)
+                elif action == delete_folder:
+                    response = qtw.QMessageBox.question(None, "Prompt", "Are you sure you want to delete '"+ node.folder.title + "'?", qtw.QMessageBox.Yes | qtw.QMessageBox.No)
+                    if response == qtw.QMessageBox.Yes:
+                        self.button_delete_feed(index)
+
 
     
     def article_context_menu(self, position) -> None:
@@ -259,10 +308,10 @@ class View():
             action = menu.exec_(self.feed_view.viewport().mapToGlobal(position))
 
             if action == delete_action:
-                self.button_delete(index.row())
+                self.button_delete_feed(index)
 
 
-    def recieve_new_articles(self, articles: List[feed.Article], feed_id: int) -> None:
+    def recieve_new_articles(self, articles: List[feedutility.Article], feed_id: int) -> None:
         """
         Recieves new article data from the feed manager and adds them to the views.
         """
@@ -272,7 +321,7 @@ class View():
         self.feed_data_changed()
             
 
-    def recieve_new_feeds(self, feeds: List[feed.Feed]) -> None:
+    def recieve_new_feeds(self, feeds: List[feedutility.Feed]) -> None:
         """
         Recieves new feed data from the feed manager and adds them to the views.
         """
@@ -284,8 +333,7 @@ class View():
         """
         Updates feed information.
         """
-        self.feed_model.update_data(self.feeds_cache)
-
+        self.feed_model.update_data()
 
 
 
@@ -295,7 +343,7 @@ class ArticleModel(qtc.QAbstractItemModel):
         initialization.
         """
         qtc.QAbstractItemModel.__init__(self)
-        self.ar : List[feed.Article] = []
+        self.ar : List[feedutility.Article] = []
 
     def rowCount(self, index: qtc.QModelIndex):
         """
@@ -361,7 +409,7 @@ class ArticleModel(qtc.QAbstractItemModel):
             self.ar.sort(key=lambda e: e.updated, reverse=order)
         self.endResetModel()
 
-    def add_articles(self, articles: List[feed.Article]):
+    def add_articles(self, articles: List[feedutility.Article]):
         """
         Adds appends an article to the cache, while refreshing the view.
         """
@@ -379,46 +427,72 @@ class ArticleModel(qtc.QAbstractItemModel):
 
 
 
-
 class Node():
-    def __init__(self, folder : feed.Folder):
+    def __init__(self, folder: feedutility.Folder=None, data: feedutility.Feed=None, parent: 'Node'=None, row: int=None):
         self.folder = folder
         self.children = []
-        self.row = None
-        self.data = None
-
+        self.parent = parent
+        self.data = data
+        self.row = row
 
 
 
 class FeedModel(qtc.QAbstractItemModel):
     def __init__(self):
         qtc.QAbstractItemModel.__init__(self)
-        self.ar : List[Union[feed.Feed, Node]] = []
+        self.tree = Node()
+        self.array : List[Node]
 
-    def rowCount(self, in_index):
+    def rowCount(self, in_index: qtc.QModelIndex):
         if in_index.isValid():
-            return 0
-        return len(self.ar)
+            return len(in_index.internalPointer().children)
+        return len(self.tree.children)
 
-    def add_feed(self, feed: feed.Feed, index: Union[None, qtc.QModelIndex]=None):
-        self.beginInsertRows(qtc.QModelIndex(), len(self.ar), 1)
-        self.ar.append(feed)
-        self.endInsertRows()
+    def add_feed(self, feed: feedutility.Feed, index: qtc.QModelIndex):
+        if index.isValid():
+            self.beginInsertRows(index, len(index.internalPointer().children), 1)
+            index.internalPointer().children.append(feed)
+            self.endInsertRows()
 
-    def remove_feed(self, row):
+
+    def update_rows(self, l: List[Node]):
+        for i,node in enumerate(l):
+            node.row = i
+
+    def remove_feed(self, index: qtc.QModelIndex):
         """
-        Removes the feed in the view, and in the cache.
+        Removes feed from the view's tree.
         """
-        self.beginRemoveRows(qtc.QModelIndex(), row, row)
-        del self.ar[row]
+        node = index.internalPointer()
+        parent = node.parent
+        row = node.row
+
+        self.beginRemoveRows(index.parent(), row, row)
+        del parent.children[row]
+        self.update_rows(parent.children)
         self.endRemoveRows()
 
-    def index(self, in_row, in_column, in_parent=None):
-        if not qtc.QAbstractItemModel.hasIndex(self, in_row, in_column):
-            return qtc.QModelIndex()
-        return qtc.QAbstractItemModel.createIndex(self, in_row, in_column, 1)
+    def index(self, row, column, parent_index=None):
+        """
+        Returns QModelIndex for given row/column.
+        """
+        if parent_index and parent_index.isValid():
+            parent = parent_index.internalPointer()
+        else:
+            parent = self.tree
+            
+        if qtc.QAbstractItemModel.hasIndex(self, row, column, parent_index):
+            return qtc.QAbstractItemModel.createIndex(self, row, column, parent.children[row])
+        return qtc.QModelIndex()
 
-    def parent(self, in_index):
+    def parent(self, index):
+        """
+        Returns the parent index of an index.
+        """
+        if index.isValid():
+            parent = index.internalPointer().parent
+            if not parent is self.tree:
+                return qtc.QAbstractItemModel.createIndex(self, parent.row, 0, parent)
         return qtc.QModelIndex()
 
     def columnCount(self, in_index):
@@ -427,21 +501,55 @@ class FeedModel(qtc.QAbstractItemModel):
     def data(self, in_index, role):
         if not in_index.isValid():
             return None
-        if role == qtc.Qt.DisplayRole:
-            if in_index.column() == 0:
-                return self.ar[in_index.row()].user_title if self.ar[in_index.row()].user_title != None else self.ar[in_index.row()].title
-            if in_index.column() == 1:
-                return self.ar[in_index.row()].unread_count
-        elif role == qtc.Qt.FontRole:
-            if self.ar[in_index.row()].unread_count > 0:
-                f = qtg.QFont()
-                f.setBold(True)
-                return f
-        return None
 
-    def set_feeds(self, feeds: List[feed.Feed]) -> None:
+        node = in_index.internalPointer()
+
+        if node.data != None:
+            if role == qtc.Qt.DisplayRole:
+                if in_index.column() == 0:
+                    return node.data.user_title if node.data.user_title != None else node.data.title
+                if in_index.column() == 1:
+                    return node.data.unread_count
+            elif role == qtc.Qt.FontRole:
+                if node.data.unread_count > 0:
+                    f = qtg.QFont()
+                    f.setBold(True)
+                    return f
+        else:
+            if role == qtc.Qt.DisplayRole:
+                if in_index.column() == 0:
+                    return node.folder.title
+                if in_index.column() == 1:
+                    return None
+        
+
+    def set_feeds(self, feeds: List[feedutility.Feed], folders: List[feedutility.Folder]) -> None:
+        tree = Node()
+        self.array = []
+
+        for folder in folders:
+            node = Node(folder=folder)
+            self.array.append(node)
+
+            if folder.parent == 0:
+                node.parent = tree
+                node.row = len(tree.children)
+                tree.children.append(node)
+            else:
+                parent = next(v for v in self.array if v.folder.db_id == folder.parent)
+                node.parent = parent
+                node.row = len(parent.children)
+                parent.children.append(node)
+
+        for feed in feeds:
+            if feed.parent_folder == 0:
+                tree.children.append(Node(data=feed, parent=tree, row=len(tree.children)))
+            else:
+                parent = next(v for v in self.array if v.folder.db_id == feed.parent_folder)
+                parent.children.append(Node(data=feed, parent=parent, row=len(parent.children)))
+            
         self.beginResetModel()
-        self.ar = feeds
+        self.tree = tree
         self.endResetModel()
 
     def headerData(self, section, orientation, role=qtc.Qt.DisplayRole):
@@ -452,11 +560,10 @@ class FeedModel(qtc.QAbstractItemModel):
                     1: "Unread"
                 }.get(section, None)
 
-    def update_row(self, row: int):
-        self.dataChanged.emit(self.index(row, 0), self.index(row, 1), [qtc.Qt.DisplayRole, qtc.Qt.FontRole])
+    def update_row(self, index: qtc.QModelIndex):
+        self.dataChanged.emit(self.index(index.row(), 0, index), self.index(index.row(), 1, index), [qtc.Qt.DisplayRole, qtc.Qt.FontRole])
 
-    def update_data(self, feeds: List[feed.Feed]):
-        self.ar = feeds
+    def update_data(self):
         self.dataChanged.emit(qtc.QModelIndex(), qtc.QModelIndex())
 
 

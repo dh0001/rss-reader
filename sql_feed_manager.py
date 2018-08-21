@@ -97,20 +97,21 @@ class FeedManager():
         """
         c = self._connection.cursor()
         feeds = []
-        for feed in c.execute('''SELECT rowid, * FROM feeds'''):
+        for feed in c.execute('''SELECT * FROM feeds'''):
             new_feed = feedutility.Feed()
             new_feed.db_id = feed[0]
-            new_feed.uri = feed[1]
-            new_feed.title = feed[2]
-            new_feed.user_title = feed[3]
-            new_feed.author = feed[4]
-            new_feed.author_uri = feed[5]
-            new_feed.category = feed[6]
-            new_feed.updated = feed[7]
-            new_feed.icon_uri = feed[8]
-            new_feed.subtitle = feed[9]
-            new_feed.refresh_rate = feed[10]
-            new_feed.meta = feed[11]
+            new_feed.parent_folder = feed[1]
+            new_feed.uri = feed[2]
+            new_feed.title = feed[3]
+            new_feed.user_title = feed[4]
+            new_feed.author = feed[5]
+            new_feed.author_uri = feed[6]
+            new_feed.category = feed[7]
+            new_feed.updated = feed[8]
+            new_feed.icon_uri = feed[9]
+            new_feed.subtitle = feed[10]
+            new_feed.refresh_rate = feed[11]
+            new_feed.meta = feed[12]
             new_feed.unread_count = self._get_unread_articles_count(new_feed.db_id)
             feeds.append(new_feed)
         self.feed_cache = feeds
@@ -122,25 +123,43 @@ class FeedManager():
         """
         c = self._connection.cursor()
         folders : List[feedutility.Folder] = []
-        for folder in c.execute('''SELECT rowid, * FROM feeds'''):
+        for folder in c.execute('''SELECT * FROM folders'''):
             folders.append(feedutility.Folder(folder[0], folder[1], folder[2]))
         return folders
 
 
-    def add_file_from_disk(self, location: str) -> None:
+    def add_file_from_disk(self, location: str, folder: int=0) -> None:
         """
         Add new feed to database from disk location.
         """
         data = _load_rss_from_disk(location)
-        self._add_feed(data, location)
+        self._add_feed(data, location, folder)
 
 
-    def add_feed_from_web(self, download_uri: str) -> None:
+    def add_feed_from_web(self, download_uri: str, folder: int=0) -> None:
         """
         Add new feed to database from web location.
         """
         data = _download_xml(download_uri)
-        self._add_feed(data, download_uri)
+        self._add_feed(data, download_uri, folder)
+
+
+    def add_folder(self, folder_name: str, folder: int=0) -> None:
+        """
+        Adds a folder to the database.
+        """
+        c = self._connection.cursor()
+        c.execute('''INSERT INTO folders VALUES (NULL, ?, ?)''', [folder, folder_name])
+        self._connection.commit()
+
+
+    def delete_folder(self, folder: feedutility.Folder) -> None:
+        """
+        Deletes a folder from the database.
+        """
+        c = self._connection.cursor()
+        c.execute('''DELETE FROM folders WHERE id = ?''', [folder.db_id])
+        self._connection.commit()
 
 
     def _get_unread_articles_count(self, feed_id: int) -> int:
@@ -194,14 +213,16 @@ class FeedManager():
 
     def delete_feed(self, feed: feedutility.Feed) -> None:
         """
-        Removes a feed with passed feed_id, and its articles from the database. Also removes the feed from the refresh
+        Removes a feed with passed feed_id, and its articles from the database and cache. Also removes the feed from the refresh
         tracker, if it has an individual refresh rate.
         """
         if feed.refresh_rate != None:
             self._refresh_schedule_remove_item(feed)
 
+        self.feed_cache.remove(feed)
+
         c = self._connection.cursor()
-        c.execute('''DELETE FROM feeds WHERE rowid = ?''', [feed.db_id])
+        c.execute('''DELETE FROM feeds WHERE id = ?''', [feed.db_id])
         c.execute('''DELETE FROM articles WHERE feed_id = ?''', [feed.db_id])
         self._connection.commit()
 
@@ -241,7 +262,7 @@ class FeedManager():
         Sets the refresh rate for an individual feed in the database, and sets/resets the scheduled refresh for that feed.
         """
         c = self._connection.cursor()
-        c.execute('''UPDATE feeds SET refresh_rate = ? WHERE rowid = ?''', [rate, feed.db_id])
+        c.execute('''UPDATE feeds SET refresh_rate = ? WHERE id = ?''', [rate, feed.db_id])
         self._connection.commit()
 
         with self._schedule_lock:
@@ -271,7 +292,7 @@ class FeedManager():
         Sets a user specified title for a feed.
         """
         c = self._connection.cursor()
-        c.execute('''UPDATE feeds SET user_title = ? WHERE rowid = ?''', [user_title, feed.db_id])
+        c.execute('''UPDATE feeds SET user_title = ? WHERE id = ?''', [user_title, feed.db_id])
         self._connection.commit()
 
         feed.user_title = user_title
@@ -295,6 +316,8 @@ class FeedManager():
         """
         c = self._connection.cursor()
         c.execute('''CREATE TABLE feeds (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            parent_folder INTEGER,
             uri TEXT,
             title TEXT,
             user_title TEXT,
@@ -318,7 +341,8 @@ class FeedManager():
             published INTEGER,
             unread INTEGER)''')
         c.execute('''CREATE TABLE folders (
-            parent INTEGER,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            parent_folder INTEGER,
             name TEXT)''')
         self._connection.commit()
 
@@ -339,23 +363,26 @@ class FeedManager():
         Add a feed entry into the database. Returns the row id of the inserted entry.
         """
         c = self._connection.cursor()
-        c.execute('''INSERT INTO feeds VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
-            [feed.uri, feed.title, feed.user_title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon_uri, feed.subtitle, feed.refresh_rate, json.dumps(feed.meta)])
+        c.execute('''INSERT INTO feeds VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
+            [feed.parent_folder, feed.uri, feed.title, feed.user_title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon_uri, feed.subtitle, feed.refresh_rate, json.dumps(feed.meta)])
         self._connection.commit()
         return c.lastrowid
 
 
-    def _add_feed(self, data: any, download_uri: str) -> None:
+    def _add_feed(self, data: any, download_uri: str, folder_id: int) -> None:
         """
         Parse downloaded atom feed data, then insert the feed data and articles data into the database.
         """
         parsed_completefeed = feedutility.atom_parse(data)
         parsed_completefeed.feed.uri = download_uri
+        parsed_completefeed.feed.parent_folder = folder_id
         row_id = self._add_feed_to_database(parsed_completefeed.feed)
         self.feed_cache.append(parsed_completefeed.feed)
 
         date_cutoff = (datetime.datetime.utcnow() - datetime.timedelta(minutes=self._time_limit)).isoformat()
         self._add_articles_to_database(_filter_new_articles(parsed_completefeed.articles, date_cutoff, set()), row_id)
+        parsed_completefeed.feed.unread_count = self._get_unread_articles_count(row_id)
+        parsed_completefeed.feed.db_id = row_id
 
 
     def _add_articles_to_database(self, articles: List[feedutility.Article], feed_id: int) -> None:
@@ -392,7 +419,7 @@ class FeedManager():
         icon_uri = ?,
         subtitle = ?,
         feed_meta = ? 
-        WHERE rowid = ?''', 
+        WHERE id = ?''', 
         [feed.uri, feed.title, feed.user_title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon_uri, feed.subtitle, json.dumps(feed.meta), feed.db_id])
         self._connection.commit()
 

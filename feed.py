@@ -8,6 +8,7 @@ class Feed:
     """
     def __init__(self):
         self.db_id : int = None
+        self.parent_folder : int = None
         self.uri : str = None           # the id
         self.title : str = None
         self.user_title : str = None
@@ -47,7 +48,7 @@ class Folder:
     Class which holds information about folders.
     """
     def __init__(self, rowid: int, parent: int, title: str):
-        self.rowid = rowid
+        self.db_id = rowid
         self.parent = parent
         self.title = title
 
