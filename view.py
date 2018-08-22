@@ -279,6 +279,7 @@ class View():
         """
         self.feeds_cache = self.feed_manager.get_all_feeds()
         self.feed_model.set_feeds(self.feeds_cache, self.feed_manager.get_all_folders())
+        self.restore_expand_status()
 
 
     def output_articles(self) -> None:
@@ -353,6 +354,22 @@ class View():
         self.feed_model.update_data()
 
 
+    def restore_expand_status(self):
+        self.feed_view.expandAll()
+        # indexes = self.feed_model.match(self.feed_model.index(0, 0), qtc.Qt.DisplayRole, "*", -1, qtc.Qt.MatchWildcard|qtc.Qt.MatchRecursive)
+        # for index in indexes:
+        #     node = index.internalPointer()
+        #     if node.folder:
+        #         self.feed_view.setExpanded(index, True)
+
+
+    def save_expand_status(self):
+        indexes = self.feed_model.match(self.feed_model.index(0, 0), qtc.Qt.DisplayRole, "*", -1, qtc.Qt.MatchWildcard|qtc.Qt.MatchRecursive)
+        for index in indexes:
+            node = index.internalPointer()
+            if node.folder:
+                self.feed_view.setExpanded(index, True)
+
 
 class ArticleModel(qtc.QAbstractItemModel):
     def __init__(self):
@@ -393,7 +410,7 @@ class ArticleModel(qtc.QAbstractItemModel):
     def data(self, in_index, role):
         if not in_index.isValid():
             return None
-        if role == qtc.Qt.DisplayRole:
+        if role == qtc.Qt.DisplayRole or role == qtc.Qt.ToolTipRole:
             if in_index.column() == 0:
                 return self.ar[in_index.row()].title
             if in_index.column() == 1:
@@ -491,11 +508,11 @@ class FeedModel(qtc.QAbstractItemModel):
         self.update_rows(parent.children)
         self.endRemoveRows()
 
-    def index(self, row, column, parent_index=None):
+    def index(self, row, column, parent_index=qtc.QModelIndex()):
         """
         Returns QModelIndex for given row/column.
         """
-        if parent_index and parent_index.isValid():
+        if parent_index.isValid():
             parent = parent_index.internalPointer()
         else:
             parent = self.tree
@@ -524,7 +541,7 @@ class FeedModel(qtc.QAbstractItemModel):
         node = in_index.internalPointer()
 
         if node.data != None:
-            if role == qtc.Qt.DisplayRole:
+            if role == qtc.Qt.DisplayRole or role == qtc.Qt.ToolTipRole:
                 if in_index.column() == 0:
                     return node.data.user_title if node.data.user_title != None else node.data.title
                 if in_index.column() == 1:
