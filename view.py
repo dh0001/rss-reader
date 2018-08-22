@@ -400,9 +400,11 @@ class ArticleModel(qtc.QAbstractItemModel):
                 return self.ar[in_index.row()].author
             if in_index.column() == 2:
                 return self.ar[in_index.row()].updated
-        if role == qtc.Qt.FontRole and self.ar[in_index.row()].unread == True:
+        elif role == qtc.Qt.FontRole:
             f = qtg.QFont()
-            f.setBold(True)
+            f.setPointSize(10)
+            if self.ar[in_index.row()].unread == True:
+                f.setBold(True)
             return f
         return None
 
@@ -527,17 +529,19 @@ class FeedModel(qtc.QAbstractItemModel):
                     return node.data.user_title if node.data.user_title != None else node.data.title
                 if in_index.column() == 1:
                     return node.data.unread_count
-            elif role == qtc.Qt.FontRole:
-                if node.data.unread_count > 0:
-                    f = qtg.QFont()
-                    f.setBold(True)
-                    return f
         else:
             if role == qtc.Qt.DisplayRole:
                 if in_index.column() == 0:
                     return node.folder.title
                 if in_index.column() == 1:
                     return None
+
+        if role == qtc.Qt.FontRole:
+            f = qtg.QFont()
+            f.setPointSize(10)
+            if node.data and node.data.unread_count > 0:
+                f.setBold(True)
+            return f
         
 
     def set_feeds(self, feeds: List[feedutility.Feed], folders: List[feedutility.Folder]) -> None:

@@ -4,7 +4,7 @@ import collections
 
 class Feed:
     """
-    Class which holds information from an Atom RSS feed.
+    Holds information from an RSS feed.
     """
     def __init__(self):
         self.db_id : int = None
@@ -25,7 +25,7 @@ class Feed:
 
 class Article:
     """
-    Class which holds information from an entry in an Atom RSS feed.
+    Holds information from an entry/article in an Atom RSS feed.
     """
     def __init__(self):
         self.db_id : int = None
