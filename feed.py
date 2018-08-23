@@ -7,11 +7,7 @@ class Feed:
     Holds information from an RSS feed.
     """
     def __init__(self):
-        self.db_id : int = None
-        self.parent_folder : int = None
-        self.uri : str = None           # the id
         self.title : str = None
-        self.user_title : str = None
         self.author : str = None
         self.author_uri : str = None
         self.category : str = None
@@ -19,6 +15,11 @@ class Feed:
         self.icon_uri : str = None
         self.subtitle : str = None
         self.meta : dict = {}
+
+        self.uri : str = None           # the id
+        self.db_id : int = None
+        self.user_title : str = None
+        self.parent_folder : int = None
         self.unread_count : int = None
         self.refresh_rate : int = None
 

@@ -334,7 +334,7 @@ class View():
         if the currently highlighted feed is the correct feed.
         """
         current_index = self.feed_view.currentIndex()
-        if current_index.isValid() and current_index.internalPointer().data.db_id == feed_id:
+        if current_index.isValid() and current_index.internalPointer().data and current_index.internalPointer().data.db_id == feed_id:
             self.article_model.add_articles(articles)
         self.feed_data_changed()
             
@@ -640,7 +640,6 @@ class GenericDialog(qtw.QDialog):
         self.show()
 
     def verify_response(self):
-        
         self.error_label.setText("Verifying...")
         self.error_label.repaint()
         if self.verify_function(self.le.text()):
