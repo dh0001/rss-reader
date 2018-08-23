@@ -72,7 +72,7 @@ class View():
         self.article_view.setSortingEnabled(True)
         self.article_view.customContextMenuRequested.connect(self.feed_context_menu)
         self.article_view.header().setStretchLastSection(False)
-        self.content_view = qtw.QTextBrowser()
+        self.content_view = TBrowser()
         self.content_view.setOpenExternalLinks(True)
         self.feed_view.selectionModel().selectionChanged.connect(self.output_articles)
         self.article_view.selectionModel().selectionChanged.connect(self.output_content)
@@ -105,7 +105,7 @@ class View():
         self.article_view.header().restoreState(qtc.QByteArray.fromHex(bytes(self.settings_manager.settings["article_view_headers"], "utf-8")))
 
         self.output_feeds()
-        #self.button_refresh_all()
+        self.refresh_all()
         self.main_window.show()
         self.app.exec_()
 
@@ -649,3 +649,9 @@ class GenericDialog(qtw.QDialog):
 
     def get_response(self):
         return self.le.text()
+
+
+
+class TBrowser(qtw.QTextBrowser):
+    def loadResource(self, type: int, url: str):
+        return None

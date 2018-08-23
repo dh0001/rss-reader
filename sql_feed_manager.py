@@ -402,7 +402,6 @@ class FeedManager():
         """
         Updates feed with new data.
         """
-        print("Updating ", feed.title)
         new_completefeed.feed.db_id = feed.db_id
         new_completefeed.feed.user_title = feed.user_title
         new_completefeed.feed.parent_folder = feed.parent_folder
@@ -434,28 +433,6 @@ class FeedManager():
         c = self._connection.cursor()
         c.execute('''DELETE from articles WHERE updated < ?''', [time_limit])
         self._connection.commit()
-
-
-    def _scheduled_refresh(self, feed: feedutility.Feed) -> None:
-        """
-        Runs refresh_feed on the feed.
-        """
-        print("refreshing ", feed.title)
-        with self._schedule_lock:
-            self.refresh_feed(feed)
-
-
-    def _scheduled_default_refresh(self) -> None:
-        """
-        Runs the scheduled refresh on feeds using the default refresh time.
-        """
-        print("start default refresh")
-        with self._schedule_lock:
-            feeds = self.get_all_feeds()
-            for feed in feeds:
-                if feed.refresh_rate == None:
-                    print("refreshing by default: ", feed.title)
-                    self.refresh_feed(feed)
         
 
     def _refresh_schedule_remove_item(self, feed: feedutility.Feed) -> None:
