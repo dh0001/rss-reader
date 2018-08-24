@@ -1,9 +1,10 @@
 {
-    "db_file": "feeds.db",
+    "db_file": "articles.db",
     "first-run": "true",
     "refresh_time": 3600,
     "default_delete_time": 4320,
-    "global_refresh_rate": 2,
+    "global_refresh_rate": 0.5,
+    "feed_counter": 0,
     "geometry": "01d9d0cb000200000000025e000000a10000058d000002fd00000266000000c000000585000002f500000000000000000780",
     "splitter1": "000000ff0000000100000002000000f70000011301ffffffff010000000200",
     "splitter2": "000000ff0000000100000002000000c8000001f401ffffffff010000000100",

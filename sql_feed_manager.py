@@ -44,6 +44,8 @@ class FeedManager():
         if self._settings.settings["first-run"] == "true":
             self._create_tables()
             self._settings.settings["first-run"] = "false"
+            with open ("feeds.json", "w") as f:
+                f.write("[]")
 
         self._feed_download_queue : queue.SimpleQueue
         self._feed_download_queue_updated_event = threading.Event()
@@ -61,6 +63,7 @@ class FeedManager():
         self._scheduler_thread.requestInterruption()
         self._update_event.set()
         self._scheduler_thread.wait()
+        self._save_all_feeds()
         self._connection.close()
 
 
@@ -94,18 +97,7 @@ class FeedManager():
         return self.feed_cache
 
 
-    def get_all_folders(self) -> List[feedutility.Folder]:
-        """
-        Returns a list containing all the folders in the database.
-        """
-        c = self._connection.cursor()
-        folders : List[feedutility.Folder] = []
-        for folder in c.execute('''SELECT * FROM folders'''):
-            folders.append(feedutility.Folder(folder[0], folder[1], folder[2]))
-        return folders
-
-
-    def add_file_from_disk(self, location: str, folder: int=0) -> None:
+    def add_file_from_disk(self, location: str, folder: feedutility.Folder) -> None:
         """
         Adds new feed to the database from disk location.
         """
@@ -113,7 +105,7 @@ class FeedManager():
         self._add_feed(data, location, folder)
 
 
-    def add_feed_from_web(self, download_uri: str, folder: int=0) -> None:
+    def add_feed_from_web(self, download_uri: str, folder: feedutility.Folder) -> None:
         """
         Adds new feed to database from web location.
         """
@@ -123,36 +115,46 @@ class FeedManager():
 
     def delete_feed(self, feed: feedutility.Feed) -> None:
         """
-        Removes a feed with passed feed_id, and its articles from the database and cache. 
+        Removes a feed with passed feed_id from cache. 
         Removes its entry from the refresh schedule, if it exists.
         """
         if feed.refresh_rate != None:
             self._refresh_schedule_remove_item(feed)
 
-        self.feed_cache.remove(feed)
-
-        c = self._connection.cursor()
-        c.execute('''DELETE FROM feeds WHERE id = ?''', [feed.db_id])
-        c.execute('''DELETE FROM articles WHERE feed_id = ?''', [feed.db_id])
-        self._connection.commit()
+        del feed.parent_folder.children[feed.row]
+        update_rows(feed.parent_folder.children)
 
 
-    def add_folder(self, folder_name: str, folder: int=0) -> None:
+    def add_folder(self, folder_name: str, folder: feedutility.Folder) -> None:
         """
-        Adds a folder to the database.
+        Adds a folder to the cache.
         """
-        c = self._connection.cursor()
-        c.execute('''INSERT INTO folders VALUES (NULL, ?, ?)''', [folder, folder_name])
-        self._connection.commit()
+        new_folder = feedutility.Folder()
+        new_folder.title = folder_name
+        new_folder.parent_folder = folder
+        new_folder.row = len(folder.children)
+        folder.children.append(new_folder)
 
 
     def delete_folder(self, folder: feedutility.Folder) -> None:
         """
-        Deletes a folder from the database.
+        Deletes a folder.
         """
-        c = self._connection.cursor()
-        c.execute('''DELETE FROM folders WHERE id = ?''', [folder.db_id])
-        self._connection.commit()
+        self._delete_feeds_in_folder(folder)
+        parent = folder.parent_folder
+        del parent.children[folder.row]
+        update_rows(parent.children)
+
+    
+    def _delete_feeds_in_folder(self, folder: feedutility.Folder) -> None:
+        """
+        Deletes all feeds in a folder recursively.
+        """
+        for child in folder.children:
+            if type(child) == feedutility.Feed:
+                self.delete_feed(child)
+            else:
+                self._delete_feeds_in_folder(child)
 
 
     def refresh_all(self) -> None:
@@ -167,8 +169,7 @@ class FeedManager():
 
     def refresh_feed(self, feed: feedutility.Feed) -> None:
         """
-        Download a feed and updates the database and cache with the new data. 
-        Calls the new article function with a list of new articles.
+        Adds a feed to the update feed queue.
         """
         self._feed_download_queue.put(feed)
         self._update_event.set()
@@ -185,12 +186,8 @@ class FeedManager():
 
     def set_refresh_rate(self, feed: feedutility.Feed, rate: Union[int, None]) -> None:
         """
-        Sets the refresh rate for an individual feed in the database, and sets/resets the scheduled refresh for that feed.
+        Sets the refresh rate for an individual feed, and sets/resets the scheduled refresh for that feed.
         """
-        c = self._connection.cursor()
-        c.execute('''UPDATE feeds SET refresh_rate = ? WHERE id = ?''', [rate, feed.db_id])
-        self._connection.commit()
-
         with self._schedule_lock:
             feed.refresh_rate = rate
             i = next((i for i,v in enumerate(self._refresh_schedule) if v.feed.db_id == feed.db_id), None)
@@ -206,10 +203,6 @@ class FeedManager():
         """
         Sets a user specified title for a feed.
         """
-        c = self._connection.cursor()
-        c.execute('''UPDATE feeds SET user_title = ? WHERE id = ?''', [user_title, feed.db_id])
-        self._connection.commit()
-
         feed.user_title = user_title
 
 
@@ -229,7 +222,8 @@ class FeedManager():
         Verifies if a url points to a proper feed.
         """
         try:
-            feedutility.atom_parse(_download_xml(url))
+            down = _download_xml(url)
+            feedutility.atom_parse(down)
             return True
         except Exception:
             pass
@@ -262,20 +256,6 @@ class FeedManager():
         Creates all the tables used in rss-reader.
         """
         c = self._connection.cursor()
-        c.execute('''CREATE TABLE feeds (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            parent_folder INTEGER,
-            uri TEXT,
-            title TEXT,
-            user_title TEXT,
-            author TEXT,
-            author_uri TEXT,
-            category TEXT,
-            updated INTEGER,
-            icon_uri TEXT,
-            subtitle TEXT,
-            refresh_rate INTEGER,
-            feed_meta TEXT)''')
         c.execute('''CREATE TABLE articles (
             feed_id INTEGER,
             identifier TEXT,
@@ -287,37 +267,30 @@ class FeedManager():
             content TEXT,
             published INTEGER,
             unread INTEGER)''')
-        c.execute('''CREATE TABLE folders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            parent_folder INTEGER,
-            name TEXT)''')
         self._connection.commit()
 
 
     def _cache_all_feeds(self):
         """
-        Returns a list containing all the feeds in the database.
+        Caches the feeds on the disk.
         """
-        c = self._connection.cursor()
-        feeds = []
-        for feed in c.execute('''SELECT * FROM feeds'''):
-            new_feed = feedutility.Feed()
-            new_feed.db_id = feed[0]
-            new_feed.parent_folder = feed[1]
-            new_feed.uri = feed[2]
-            new_feed.title = feed[3]
-            new_feed.user_title = feed[4]
-            new_feed.author = feed[5]
-            new_feed.author_uri = feed[6]
-            new_feed.category = feed[7]
-            new_feed.updated = feed[8]
-            new_feed.icon_uri = feed[9]
-            new_feed.subtitle = feed[10]
-            new_feed.refresh_rate = feed[11]
-            new_feed.meta = feed[12]
-            new_feed.unread_count = self._get_unread_articles_count(new_feed.db_id)
-            feeds.append(new_feed)
-        self.feed_cache = feeds
+        tree = feedutility.Folder()
+        with open("feeds.json", "rb") as f:
+            s = f.read().decode("utf-8")
+            l = json.loads(s, object_hook=dict_to_feed_or_folder)
+
+        tree.children = l
+        set_parents(tree)
+        self.feed_cache = tree
+
+
+    def _save_all_feeds(self):
+        """
+        Saves contents of the cache to the disk.
+        """
+        with open ("feeds.json", "w") as f:
+            f.write(json.dumps(self.feed_cache.children, default=lambda o: _remove_parents(o), indent=4))
+        
 
 
     def _get_unread_articles_count(self, feed_id: int) -> int:
@@ -338,31 +311,27 @@ class FeedManager():
         return articles
 
 
-    def _add_feed_to_database(self, feed: feedutility.Feed) -> int:
-        """
-        Add a feed entry into the database. Returns the row id of the inserted entry.
-        """
-        c = self._connection.cursor()
-        c.execute('''INSERT INTO feeds VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
-            [feed.parent_folder, feed.uri, feed.title, feed.user_title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon_uri, feed.subtitle, feed.refresh_rate, json.dumps(feed.meta)])
-        self._connection.commit()
-        return c.lastrowid
-
-
-    def _add_feed(self, data: any, download_uri: str, folder_id: int) -> None:
+    def _add_feed(self, data: feedutility.CompleteFeed, download_uri: str, folder: feedutility.Folder) -> None:
         """
         Parse downloaded atom feed data, then insert the feed data and articles data into the database.
         """
         parsed_completefeed = feedutility.atom_parse(data)
-        parsed_completefeed.feed.uri = download_uri
-        parsed_completefeed.feed.parent_folder = folder_id
-        row_id = self._add_feed_to_database(parsed_completefeed.feed)
-        self.feed_cache.append(parsed_completefeed.feed)
+
+        new_feed = feedutility.Feed()
+        new_feed.__dict__.update(parsed_completefeed.feed.__dict__)
+        new_feed.uri = download_uri
+
+        feed_id = self._settings.settings["feed_counter"]
+        self._settings.settings["feed_counter"] += 1
 
         date_cutoff = (datetime.datetime.utcnow() - datetime.timedelta(minutes=self._time_limit)).isoformat()
-        self._add_articles_to_database(_filter_new_articles(parsed_completefeed.articles, date_cutoff, set()), row_id)
-        parsed_completefeed.feed.unread_count = self._get_unread_articles_count(row_id)
-        parsed_completefeed.feed.db_id = row_id
+        self._add_articles_to_database(_filter_new_articles(parsed_completefeed.articles, date_cutoff, set()), feed_id)
+        new_feed.unread_count = self._get_unread_articles_count(feed_id)
+        new_feed.db_id = feed_id
+
+        new_feed.row = len(folder.children)
+        new_feed.parent_folder = folder
+        folder.children.append(new_feed)
 
 
     def _add_articles_to_database(self, articles: List[feedutility.Article], feed_id: int) -> None:
@@ -402,18 +371,10 @@ class FeedManager():
         """
         Updates feed with new data.
         """
-        new_completefeed.feed.db_id = feed.db_id
-        new_completefeed.feed.user_title = feed.user_title
-        new_completefeed.feed.parent_folder = feed.parent_folder
-        new_completefeed.feed.uri = feed.uri
-        new_completefeed.feed.refresh_rate = feed.refresh_rate
-
-        feed.__dict__ = new_completefeed.feed.__dict__
+        feed.__dict__.update(new_completefeed.feed.__dict__)
         
         date_cutoff = (datetime.datetime.utcnow() - datetime.timedelta(minutes=self._time_limit)).isoformat()
         new_articles = _filter_new_articles(new_completefeed.articles, date_cutoff, self._get_article_identifiers(feed.db_id))
-
-        self._update_feed_in_database(feed)
 
         for article in new_articles:
             article.feed_id = feed.db_id
@@ -423,7 +384,7 @@ class FeedManager():
         feed.unread_count = self._get_unread_articles_count(feed.db_id)
 
         if callable(self._new_article_function):
-            self._new_article_function(new_articles, new_completefeed.feed.db_id)
+            self._new_article_function(new_articles, feed.db_id)
 
 
     def _delete_old_articles(self, time_limit: str) -> None:
@@ -599,3 +560,36 @@ def _load_rss_from_disk(f: str) -> str:
     with open(f, "rb") as file:
         rss = file.read().decode("utf-8")
         return rss
+
+
+def _cache_from_file() -> feedutility.Folder:
+    """
+    """
+
+def dict_to_feed_or_folder(d):
+    if "children" in d:
+        node = feedutility.Folder()
+        node.__dict__ = d
+        return node
+    if "author_uri" in d:
+        feed = feedutility.Feed()
+        feed.__dict__ = d
+        return feed
+    return d
+
+
+def _remove_parents(a):
+    if "parent_folder" in a.__dict__:
+        del a.__dict__["parent_folder"]
+    return a.__dict__
+
+def set_parents(tree):
+    for child in tree.children:
+        child.parent_folder = tree
+        if type(child) == feedutility.Folder:
+            set_parents(child)
+
+
+def update_rows(l: list):
+    for i,node in enumerate(l):
+        node.row = i
