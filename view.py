@@ -115,7 +115,6 @@ class View():
         """
         Opens a dialog allowing a user to enter a url for a new feed.
         Called when the add feed button is pressed. Opens a dialog which allows inputting a new feed.
-        Resets the screen.
         """
         dialog = GenericDialog(self.feed_manager.verify_feed_url, "Add Feed:", "Add Feed", "")
         if (dialog.exec_() == qtw.QDialog.Accepted):
@@ -135,7 +134,6 @@ class View():
         """
         Opens a message box prompt which confirms if the user wants to delete a feed.
         Deletes a feed from the view, then tells the feed manager to remove it from the database.
-        Resets the screen.
         """
         feed = index.internalPointer()
         response = qtw.QMessageBox.question(None, "Prompt", "Are you sure you want to delete '" + (feed.user_title if feed.user_title != None else feed.title) + "'?", qtw.QMessageBox.Yes | qtw.QMessageBox.No)
@@ -143,14 +141,12 @@ class View():
             self.feed_model.beginRemoveRows(index.parent(), feed.row, feed.row)
             self.feed_manager.delete_feed(feed)
             self.feed_model.endRemoveRows()
-            self.reset_screen()
 
 
     def prompt_add_folder(self, index: qtc.QModelIndex=None) -> None:
         """
         Opens a dialog allowing a user to enter a name for a new folder.
         Adds a folder to the feed database, with the passed index as a parent.
-        Resets the screen.
         """
         dialog = GenericDialog(lambda x: True, "Add Folder:", "Add Folder", "")
         if (dialog.exec_() == qtw.QDialog.Accepted):
@@ -162,6 +158,21 @@ class View():
             self.feed_model.beginInsertRows(index, len(folder.children), len(folder.children))
             self.feed_manager.add_folder(dialog.get_response(), folder)
             self.feed_model.endInsertRows()
+
+
+    def prompt_rename_folder(self, index: qtc.QModelIndex) -> None:
+        """
+        Opens a dialog allowing a user to rename a folder.
+        """
+        dialog = GenericDialog(lambda x: True, "Rename Folder:", "Rename Folder", "")
+        if (dialog.exec_() == qtw.QDialog.Accepted):
+            if index:
+                folder = index.internalPointer()
+            else:
+                folder = self.feeds_cache
+                index = qtc.QModelIndex()
+            self.feed_manager.rename_folder(dialog.get_response(), folder)
+            self.feed_model.update_row(index)
 
 
     def prompt_delete_folder(self, index: qtc.QModelIndex) -> None:
@@ -235,14 +246,17 @@ class View():
                     self.prompt_set_user_custom_title(index)
 
             else:
-                add_feed = menu.addAction("Add Feed")
-                add_folder = menu.addAction("Add Folder")
+                add_feed = menu.addAction("Add Feed...")
+                add_folder = menu.addAction("Add Folder...")
+                rename_folder = menu.addAction("Rename...")
                 delete_folder = menu.addAction("Delete Folder")
                 action = menu.exec_(self.feed_view.viewport().mapToGlobal(position))
                 if action == add_feed:
                     self.prompt_add_feed(index)
                 elif action == add_folder:
                     self.prompt_add_folder(index)
+                elif action == rename_folder:
+                    self.prompt_rename_folder(index)
                 elif action == delete_folder:
                     self.prompt_delete_folder(index)
 

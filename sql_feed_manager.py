@@ -146,6 +146,13 @@ class FeedManager():
         update_rows(parent.children)
 
     
+    def rename_folder(self, name: str, folder: feedutility.Folder) -> None:
+        """
+        Changes the name of a folder.
+        """
+        folder.title = name
+
+        
     def _delete_feeds_in_folder(self, folder: feedutility.Folder) -> None:
         """
         Deletes all feeds in a folder recursively.
