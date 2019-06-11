@@ -4,6 +4,7 @@
 !rss_reader.py
 !settings.py
 !sql_feed_manager.py
+!feed_manager.py
 !view.py
 !.gitignore
 !defaultsettings.json

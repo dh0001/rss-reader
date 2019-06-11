@@ -1,10 +1,10 @@
 import feed as feedutility
-import sql_feed_manager
+import feed_manager
 import settings
 
-import PyQt5.QtWidgets as qtw
-import PyQt5.QtCore as qtc
-import PyQt5.QtGui as qtg
+import PySide2.QtWidgets as qtw
+import PySide2.QtCore as qtc
+import PySide2.QtGui as qtg
 
 from typing import List, Union
 import json
@@ -12,7 +12,7 @@ import json
 
 class View():
 
-    def __init__(self, feed_mgr: sql_feed_manager.FeedManager, settings: settings.Settings):
+    def __init__(self, feed_mgr: feed_manager.FeedManager, settings: settings.Settings):
         """
         initialization.
         """

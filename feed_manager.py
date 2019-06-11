@@ -10,7 +10,7 @@ import json
 import datetime
 import queue
 from typing import List, Union
-from PyQt5 import QtCore as qtc
+from PySide2 import QtCore as qtc
 from sortedcontainers import SortedKeyList
 
 
