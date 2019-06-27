@@ -16,20 +16,17 @@ from sortedcontainers import SortedKeyList
 
 class FeedManager():
     """
-    Manages the feed objects, and connections to the database.
+    Provides an interface for getting feed and article data. Also manages
+    automatic updating of feeds, there are events for when updates happen.
     """
 
     def __init__(self, settings: settings.Settings):
-        """
-        initialization.
-        """
         self._settings = settings
+        
         self._connection = sqlite3.connect(settings.settings["db_file"], check_same_thread=False)
         self.feed_cache : List[feedutility.Feed]
 
-        self._new_feed_function : any = None
-        self._new_article_function : any = None
-        self._feed_data_changed_function : any = None
+        self.feeds_updated_event = qtc.Signal()
         
         self._time_limit : int = self._settings.settings["default_delete_time"]
 
@@ -237,27 +234,6 @@ class FeedManager():
         return False
 
 
-    def set_feed_notify(self, call: any) -> None:
-        """
-        Tells the feed manager to run the passed function when feed information changes. Passes a list of feed.
-        """
-        self._new_feed_function = call
-
-
-    def set_article_notify(self, call: any) -> None:
-        """
-        Tells the feed manager to run the passed function when article information changes. Passes a list of article.
-        """
-        self._new_article_function = call
-
-    
-    def set_feed_data_changed_notify(self, call: any) -> None:
-        """
-        Tells the feed manager to run the passed function when feed information changes. Passes a list of feed.
-        """
-        self._feed_data_changed_function = call
-
-
     def _create_tables(self) -> None:
         """
         Creates all the tables used in rss-reader.
@@ -390,8 +366,7 @@ class FeedManager():
         self._add_articles_to_database(new_articles, feed.db_id)
         feed.unread_count = self._get_unread_articles_count(feed.db_id)
 
-        if callable(self._new_article_function):
-            self._new_article_function(new_articles, feed.db_id)
+        # TODO: signal
 
 
     def _delete_old_articles(self, time_limit: str) -> None:
@@ -475,9 +450,9 @@ class _UpdateThreadSettings():
 
 
 class UpdateThread(qtc.QThread):
-    update_feed_event = qtc.pyqtSignal(feedutility.Feed, object)
-    scheduled_default_refresh_event = qtc.pyqtSignal()
-    download_error_event = qtc.pyqtSignal()
+    update_feed_event = qtc.Signal(feedutility.Feed, object)
+    scheduled_default_refresh_event = qtc.Signal()
+    download_error_event = qtc.Signal()
 
     def __init__(self, schedule: SortedKeyList, update_event: threading.Event, default_refresh: _DefaultFeedRefresh, schedule_lock: threading.Lock, feed_list: List[feedutility.Feed], feed_lock: threading.Lock, queue: queue.SimpleQueue, settings: _UpdateThreadSettings):
         qtc.QThread.__init__(self)

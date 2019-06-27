@@ -15,7 +15,7 @@ A simple RSS Reader application which reads xml data adhering to the Atom specif
 
 ## Required Packages
 
-* PyQt5
+* PySide2
 * requests
 * defusedxml
 * sortedcontainers

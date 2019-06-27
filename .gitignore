@@ -6,9 +6,10 @@
 !sql_feed_manager.py
 !feed_manager.py
 !view.py
+!FeedView.py
+!ArticleView.py
 !.gitignore
 !defaultsettings.json
-!design-notes.md
 .vscode
 
 
