@@ -14,19 +14,23 @@ from PySide2 import QtCore as qtc
 from sortedcontainers import SortedKeyList
 
 
-class FeedManager():
+class FeedManager(qtc.QObject):
     """
     Provides an interface for getting feed and article data. Also manages
-    automatic updating of feeds, there are events for when updates happen.
+    automatic updating of feeds.
     """
 
-    def __init__(self, settings: settings.Settings):
-        self._settings = settings
-        
-        self._connection = sqlite3.connect(settings.settings["db_file"], check_same_thread=False)
-        self.feed_cache : List[feedutility.Feed]
+    feeds_updated_event = qtc.Signal()
 
-        self.feeds_updated_event = qtc.Signal()
+    def __init__(self, settings: settings.Settings):
+        super().__init__()
+        
+        self._settings = settings
+
+        self.feed_cache : feedutility.Folder()
+
+        self.connection = sqlite3.connect(settings.settings["db_file"], check_same_thread=False)
+        
         
         self._time_limit : int = self._settings.settings["default_delete_time"]
 
@@ -61,14 +65,14 @@ class FeedManager():
         self._update_event.set()
         self._scheduler_thread.wait()
         self._save_all_feeds()
-        self._connection.close()
+        self.connection.close()
 
 
     def get_articles(self, feed_id: int) -> List[feedutility.Article]:
         """
         Returns a list containing all the articles with passed feed_id.
         """
-        c = self._connection.cursor()
+        c = self.connection.cursor()
         articles = []
         for article in c.execute('''SELECT rowid, * FROM articles WHERE feed_id = ?''', [feed_id]):
             return_article = feedutility.Article()
@@ -87,7 +91,7 @@ class FeedManager():
         return articles
 
 
-    def get_all_feeds(self) -> List[feedutility.Feed]:
+    def get_feeds_cache(self) -> List[feedutility.Feed]:
         """
         Returns a list containing all the feeds in the database.
         """
@@ -183,9 +187,9 @@ class FeedManager():
         """
         Sets the unread status in the database for passed article_id.
         """
-        c = self._connection.cursor()
+        c = self.connection.cursor()
         c.execute('''UPDATE articles SET unread = ? WHERE rowid = ?''', [status, article_id])
-        self._connection.commit()
+        self.connection.commit()
 
 
     def set_refresh_rate(self, feed: feedutility.Feed, rate: Union[int, None]) -> None:
@@ -238,7 +242,7 @@ class FeedManager():
         """
         Creates all the tables used in rss-reader.
         """
-        c = self._connection.cursor()
+        c = self.connection.cursor()
         c.execute('''CREATE TABLE articles (
             feed_id INTEGER,
             identifier TEXT,
@@ -250,7 +254,7 @@ class FeedManager():
             content TEXT,
             published INTEGER,
             unread INTEGER)''')
-        self._connection.commit()
+        self.connection.commit()
 
 
     def _cache_all_feeds(self):
@@ -280,14 +284,14 @@ class FeedManager():
         """
         Return the number of unread articles for the feed with passed feed_id. Sql operation.
         """
-        return self._connection.cursor().execute('''SELECT count(*) FROM articles WHERE unread = 1 AND feed_id = ?''', [feed_id]).fetchone()[0]
+        return self.connection.cursor().execute('''SELECT count(*) FROM articles WHERE unread = 1 AND feed_id = ?''', [feed_id]).fetchone()[0]
     
 
     def _get_article_identifiers(self, feed_id: int) -> set:
         """
         Returns a set containing all the article atom id's from the feed with passed feed_id's id.
         """
-        c = self._connection.cursor()
+        c = self.connection.cursor()
         articles = set()
         for article in c.execute('''SELECT identifier FROM articles WHERE feed_id = ?''', [feed_id]):
             articles.add(article[0])
@@ -321,19 +325,19 @@ class FeedManager():
         """
         Add a list of articles to the database, and modify them with db_id filled in.
         """
-        c = self._connection.cursor()
+        c = self.connection.cursor()
         for article in articles:
             c.execute('''INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
                 [feed_id, article.identifier, article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published, 1])
             article.db_id = c.lastrowid
-        self._connection.commit()
+        self.connection.commit()
 
 
     def _update_feed_in_database(self, feed: feedutility.Feed) -> None:
         """
         Update the passed feed in the database.
         """
-        c = self._connection.cursor()
+        c = self.connection.cursor()
         c.execute('''UPDATE feeds SET
         uri = ?,
         title = ?,
@@ -347,7 +351,7 @@ class FeedManager():
         feed_meta = ? 
         WHERE id = ?''', 
         [feed.uri, feed.title, feed.user_title, feed.author, feed.author_uri, feed.category, feed.updated, feed.icon_uri, feed.subtitle, json.dumps(feed.meta), feed.db_id])
-        self._connection.commit()
+        self.connection.commit()
 
 
     def _update_feed_with_data(self, feed: feedutility.Feed, new_completefeed: feedutility.CompleteFeed):
@@ -366,16 +370,15 @@ class FeedManager():
         self._add_articles_to_database(new_articles, feed.db_id)
         feed.unread_count = self._get_unread_articles_count(feed.db_id)
 
-        # TODO: signal
-
 
     def _delete_old_articles(self, time_limit: str) -> None:
         """
-        Deletes articles in the database which are not after the passed time_limit. Time_limit is an iso formatted time.
+        Deletes articles in the database which are not after the passed time_limit.
+        Time_limit is a string with an iso formatted time.
         """
-        c = self._connection.cursor()
+        c = self.connection.cursor()
         c.execute('''DELETE from articles WHERE updated < ?''', [time_limit])
-        self._connection.commit()
+        self.connection.commit()
         
 
     def _refresh_schedule_remove_item(self, feed: feedutility.Feed) -> None:
@@ -393,7 +396,7 @@ class FeedManager():
         Populates individual_refresh_tracker and starts the refresh schedule.
         """
         self._refresh_schedule = SortedKeyList(key=lambda x: x.scheduled_time)
-        feeds = self.get_all_feeds()
+        feeds = self.get_feeds_cache()
         self._feed_download_queue = queue.SimpleQueue()
 
         for feed in feeds:
@@ -564,6 +567,7 @@ def _remove_parents(a):
     if "parent_folder" in a.__dict__:
         del a.__dict__["parent_folder"]
     return a.__dict__
+
 
 def set_parents(tree):
     for child in tree.children:

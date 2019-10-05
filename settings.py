@@ -9,8 +9,8 @@ class Settings():
         self.settings : dict
         self._settings_file = file
 
-        if not os.path.exists(self.settings_file):
-            copyfile("defaultsettings.json", self.settings_file)
+        if not os.path.exists(self._settings_file):
+            copyfile("defaultsettings.json", self._settings_file)
 
         with open(file, "rb") as f:
             s = f.read().decode("utf-8")

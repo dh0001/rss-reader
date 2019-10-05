@@ -6,47 +6,44 @@ import PySide2.QtWidgets as qtw
 import PySide2.QtCore as qtc
 import PySide2.QtGui as qtg
 
+from typing import List, Union
+
 
 class FeedView(qtw.QTreeView):
     """
-    A view for displaying feeds. Allows selecting feeds, renaming them, and deleting them from
-    the database. Has an feed_selected_event can be used to see when what is currently selected.
+    A view for displaying feeds. feed_selected_event fires when a feed is selected.
+    It should be the sole interface for interacting with the feeds in the feed manager,
+    and there should only be one of these views.
     """
+
+    # event for when the selected feed changes. The integer is the db_id of the feed.
+    feed_selected_event = qtc.Signal(int)
 
     def __init__(self, fm : feed_manager.FeedManager):
         super().__init__()
 
-        # event for when the selected feed changes. The integer is the db_id of the feed.
-        self.feed_selected_event = qtc.Signal(int)
-
-        self.selectionChanged.connect(self.changed)
-        self.feed_manager = fm
-        self.feed_model = FeedModel()
-        self.setModel(self.feed_model)
-        #self.setRootIsDecorated(False)
+        self.feedManager = fm
+        self.feedViewModel = FeedViewModel(self.feedManager.get_feeds_cache())
+        self.setModel(self.feedViewModel)
+        self.selectionModel().selectionChanged.connect(self.fire_selected_event)
+        # self.setRootIsDecorated(False)
         self.setContextMenuPolicy(qtc.Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.feed_context_menu)
         self.header().setStretchLastSection(False)
 
+        self.feedManager.feeds_updated_event.connect(self.feed_data_changed)
+        self.restore_expand_status()
 
-    def changed(self) -> None:
+
+    def fire_selected_event(self) -> None:
         """
+        Fires feed_selected_event with the current selection.
         """
-        index = self.feed_view.currentIndex()
-        self.articles_cache = []
+        index = self.currentIndex()
 
         # could have been a folder that was selected
         if index.isValid() and type(index.internalPointer()) == feedutility.Feed:
-            self.feed_selected_event.emit(index.internalPointer().db_id)
-            
-
-    def refresh(self) -> None:
-        """
-        Refreshes the data in the FeedView using feed_manager.
-        """
-        self.feeds_cache = self.feed_manager.get_all_feeds()
-        self.feed_model.set_feeds(self.feeds_cache)
-        self.restore_expand_status()
+            self.feed_selected_event.emit(index.internalPointer().db_id)        
 
 
     def restore_expand_status(self):
@@ -56,6 +53,13 @@ class FeedView(qtw.QTreeView):
         #     node = index.internalPointer()
         #     if node.folder:
         #         self.feed_view.setExpanded(index, True)
+
+
+    def feed_data_changed(self) -> None:
+        """
+        Updates feed information.
+        """
+        self.feedViewModel.update_all_data()
 
 
     def feed_context_menu(self, position) -> None:
@@ -103,18 +107,17 @@ class FeedView(qtw.QTreeView):
     def prompt_add_feed(self, index: qtc.QModelIndex=None) -> None:
         """
         Opens a dialog allowing a user to enter a url for a new feed.
-        Called when the add feed button is pressed. Opens a dialog which allows inputting a new feed.
         """
-        dialog = GenericDialog(self.feed_manager.verify_feed_url, "Add Feed:", "Add Feed", "")
+        dialog = VerifyDialog(self.feed_manager.verify_feed_url, "Add Feed:", "Add Feed", "")
         if (dialog.exec_() == qtw.QDialog.Accepted):
             if index:
                 folder = index.internalPointer()
             else:
                 folder = self.feeds_cache
                 index = qtc.QModelIndex()
-            self.feed_model.beginInsertRows(index, len(folder.children), len(folder.children))
-            self.feed_manager.add_feed_from_web(dialog.get_response(), folder)
-            self.feed_model.endInsertRows()
+            self.feedViewModel.beginInsertRows(index, len(folder.children), len(folder.children))
+            self.feedManager.add_feed_from_web(dialog.get_response(), folder)
+            self.feedViewModel.endInsertRows()
 
             self.setExpanded(index, True)
 
@@ -127,9 +130,9 @@ class FeedView(qtw.QTreeView):
         feed = index.internalPointer()
         response = qtw.QMessageBox.question(None, "Prompt", "Are you sure you want to delete '" + (feed.user_title if feed.user_title != None else feed.title) + "'?", qtw.QMessageBox.Yes | qtw.QMessageBox.No)
         if response == qtw.QMessageBox.Yes:
-            self.feed_model.beginRemoveRows(index.parent(), feed.row, feed.row)
-            self.feed_manager.delete_feed(feed)
-            self.feed_model.endRemoveRows()
+            self.feedViewModel.beginRemoveRows(index.parent(), feed.row, feed.row)
+            self.feedManager.delete_feed(feed)
+            self.feedViewModel.endRemoveRows()
 
 
     def prompt_add_folder(self, index: qtc.QModelIndex=None) -> None:
@@ -137,31 +140,31 @@ class FeedView(qtw.QTreeView):
         Opens a dialog allowing a user to enter a name for a new folder.
         Adds a folder to the feed database, with the passed index as a parent.
         """
-        dialog = GenericDialog(lambda x: True, "Add Folder:", "Add Folder", "")
+        dialog = VerifyDialog(lambda x: True, "Add Folder:", "Add Folder", "")
         if (dialog.exec_() == qtw.QDialog.Accepted):
             if index:
                 folder = index.internalPointer()
             else:
                 folder = self.feeds_cache
                 index = qtc.QModelIndex()
-            self.feed_model.beginInsertRows(index, len(folder.children), len(folder.children))
-            self.feed_manager.add_folder(dialog.get_response(), folder)
-            self.feed_model.endInsertRows()
+            self.feedViewModel.beginInsertRows(index, len(folder.children), len(folder.children))
+            self.feedManager.add_folder(dialog.get_response(), folder)
+            self.feedViewModel.endInsertRows()
 
 
     def prompt_rename_folder(self, index: qtc.QModelIndex) -> None:
         """
         Opens a dialog allowing a user to rename a folder.
         """
-        dialog = GenericDialog(lambda x: True, "Rename Folder:", "Rename Folder", "")
+        dialog = VerifyDialog(lambda x: True, "Rename Folder:", "Rename Folder", "")
         if (dialog.exec_() == qtw.QDialog.Accepted):
             if index:
                 folder = index.internalPointer()
             else:
                 folder = self.feeds_cache
                 index = qtc.QModelIndex()
-            self.feed_manager.rename_folder(dialog.get_response(), folder)
-            self.feed_model.update_row(index)
+            self.feedManager.rename_folder(dialog.get_response(), folder)
+            self.feedViewModel.update_row(index)
 
 
     def prompt_delete_folder(self, index: qtc.QModelIndex) -> None:
@@ -175,9 +178,9 @@ class FeedView(qtw.QTreeView):
         if response == qtw.QMessageBox.Yes:
 
 
-            self.feed_model.beginRemoveRows(index.parent(), folder.row, folder.row)
-            self.feed_manager.delete_folder(folder)
-            self.feed_model.endRemoveRows()
+            self.feedViewModel.beginRemoveRows(index.parent(), folder.row, folder.row)
+            self.feedManager.delete_folder(folder)
+            self.feedViewModel.endRemoveRows()
             self.reset_screen()
 
 
@@ -188,11 +191,11 @@ class FeedView(qtw.QTreeView):
         Tells the view to update the row of the passed index.
         """
         feed = index.internalPointer().data
-        dialog = GenericDialog(lambda x: True, "Title:", "Set Title", feed.user_title if feed.user_title != None else feed.title)
+        dialog = VerifyDialog(lambda x: True, "Title:", "Set Title", feed.user_title if feed.user_title != None else feed.title)
         if (dialog.exec_() == qtw.QDialog.Accepted):
             response = dialog.get_response() if dialog.get_response() != "" else None
-            self.feed_manager.set_feed_user_title(feed, response)
-            self.feed_model.update_row(index)
+            self.feedManager.set_feed_user_title(feed, response)
+            self.feedViewModel.update_row(index)
 
         
     def prompt_set_feed_refresh_rate(self, index: qtc.QModelIndex) -> None:
@@ -202,19 +205,28 @@ class FeedView(qtw.QTreeView):
         Tells the view to update the row of the passed index.
         """
         feed = index.internalPointer().data
-        dialog = GenericDialog(lambda x: x.isdigit() or x == "", "Refresh Rate (seconds):", "Set Refresh Rate", str(feed.refresh_rate))
+        dialog = VerifyDialog(lambda x: x.isdigit() or x == "", "Refresh Rate (seconds):", "Set Refresh Rate", str(feed.refresh_rate))
         if (dialog.exec_() == qtw.QDialog.Accepted):
             response = int(dialog.get_response()) if dialog.get_response() != "" else None
-            self.feed_manager.set_refresh_rate(feed, response)
-            self.feed_model.update_row(index)
+            self.feedManager.set_refresh_rate(feed, response)
+            self.feedViewModel.update_row(index)
+
+
+    def refresh_single(self, feed: feedutility.Feed) -> None:
+        """
+        Called when a refresh button is pressed. Tells the feed manager to update the feed.
+        """
+        self.feed_manager.refresh_feed(feed)
 
 
 
 
-class FeedModel(qtc.QAbstractItemModel):
-    def __init__(self):
+class FeedViewModel(qtc.QAbstractItemModel):
+    def __init__(self, folder: feedutility.Folder):
         qtc.QAbstractItemModel.__init__(self)
-        self.tree = feedutility.Folder()
+        self.tree = folder
+
+
 
     def rowCount(self, in_index: qtc.QModelIndex):
         if in_index.isValid():
@@ -223,6 +235,7 @@ class FeedModel(qtc.QAbstractItemModel):
                 return len(in_index.internalPointer().children)
             return 0
         return len(self.tree.children)
+
 
     def index(self, row, column, parent_index=qtc.QModelIndex()):
         """
@@ -237,6 +250,7 @@ class FeedModel(qtc.QAbstractItemModel):
             return qtc.QAbstractItemModel.createIndex(self, row, column, parent.children[row])
         return qtc.QModelIndex()
 
+
     def parent(self, index):
         """
         Returns the parent index of an index.
@@ -247,11 +261,13 @@ class FeedModel(qtc.QAbstractItemModel):
                 return qtc.QAbstractItemModel.createIndex(self, parent.row, 0, parent)
         return qtc.QModelIndex()
 
+
     def columnCount(self, in_index):
         """
-        Returns 2. There are only two columns in FeedView, the feed name, and its unread count.
+        There are only two columns in FeedView, the feed name, and its unread count.
         """
         return 2
+
 
     def data(self, in_index, role):
         if not in_index.isValid():
@@ -287,6 +303,7 @@ class FeedModel(qtc.QAbstractItemModel):
         self.tree = tree
         self.endResetModel()
 
+
     def headerData(self, section, orientation, role=qtc.Qt.DisplayRole):
         if role == qtc.Qt.DisplayRole:
             if orientation == qtc.Qt.Horizontal: # Horizontal
@@ -295,15 +312,17 @@ class FeedModel(qtc.QAbstractItemModel):
                     1: "Unread"
                 }.get(section, None)
 
+
     def update_row(self, index: qtc.QModelIndex):
         self.dataChanged.emit(self.index(index.row(), 0, index), self.index(index.row(), 1, index), [qtc.Qt.DisplayRole, qtc.Qt.FontRole])
 
-    def update_data(self):
+
+    def update_all_data(self):
         self.dataChanged.emit(qtc.QModelIndex(), qtc.QModelIndex())
 
 
 
-class GenericDialog(qtw.QDialog):
+class VerifyDialog(qtw.QDialog):
 
     def __init__(self, verify, prompt, window_title, default_text):
         qtw.QDialog.__init__(self, None, qtc.Qt.WindowCloseButtonHint | qtc.Qt.WindowTitleHint)
