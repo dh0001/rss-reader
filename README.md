@@ -1,8 +1,8 @@
-# rss-reader
+# RSS Reader
 
 wip
 
-A simple RSS Reader application. Written in Python.
+Open source RSS Reader application. Written in Python 3.
 
 ## Required Packages
 

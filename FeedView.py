@@ -23,7 +23,7 @@ class FeedView(qtw.QTreeView):
         super().__init__()
 
         self.feed_manager = fm
-        self.feeds_cache = self.feed_manager.get_feeds_cache()
+        self.feeds_cache = self.feed_manager.feed_cache
         self.feedViewModel = FeedViewModel(self.feeds_cache)
         self.setModel(self.feedViewModel)
         self.selectionModel().selectionChanged.connect(self.fire_selected_event)
@@ -89,6 +89,7 @@ class FeedView(qtw.QTreeView):
                     self.prompt_set_user_custom_title(index)
 
             else:
+                # it is a folder
                 add_feed = menu.addAction("Add Feed...")
                 add_folder = menu.addAction("Add Folder...")
                 rename_folder = menu.addAction("Rename...")
@@ -205,7 +206,7 @@ class FeedView(qtw.QTreeView):
         Tells the feed manager to set the refresh rate of the feed in the database.
         Tells the view to update the row of the passed index.
         """
-        feed = index.internalPointer().data
+        feed = index.internalPointer()
         dialog = VerifyDialog(lambda x: x.isdigit() or x == "", "Refresh Rate (seconds):", "Set Refresh Rate", str(feed.refresh_rate))
         if (dialog.exec_() == qtw.QDialog.Accepted):
             response = int(dialog.get_response()) if dialog.get_response() != "" else None

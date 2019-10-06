@@ -76,7 +76,7 @@ class View():
         menu_bar.addAction("Add feed...").triggered.connect(self.feed_view.prompt_add_feed)
         menu_bar.addAction("Add folder...").triggered.connect(self.feed_view.prompt_add_folder)
         menu_bar.addAction("Update All Feeds").triggered.connect(self.refresh_all)
-        menu_bar.addAction("Set Global Update Rate").triggered.connect(self.refresh_all)
+        menu_bar.addAction("Set Global Update Rate").triggered.connect(self.prompt_set_refresh_rate)
         # menu_bar.addAction("Refresh Caches").triggered.connect(self.reset_screen)
         menu_bar.addSeparator()
         menu_bar.addAction("Exit").triggered.connect(qtc.QCoreApplication.quit)
@@ -118,7 +118,8 @@ class View():
     def output_content(self, content) -> None:
         """
         Gets highlighted article in article_display, then outputs the content into content_display.
-        """        
+        """
+        
         self.content_view.setHtml(content)
         # if index.isValid():
         #     row = index.row()
@@ -154,3 +155,7 @@ class View():
 class TBrowser(qtw.QTextBrowser):
     def loadResource(self, type: int, url: str):
         return None
+
+    def __init__(self):
+        super().__init__()
+        self.zoomIn(2)
