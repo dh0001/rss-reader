@@ -32,7 +32,10 @@ class ArticleView(qtw.QTreeView):
         self.header().setStretchLastSection(False)
         self.setRootIsDecorated(False)
         self.setSortingEnabled(True)
+
         self.selectionModel().selectionChanged.connect(self.fire_selected_event)
+
+        self.feed_manager.article_updated_event.connect(self.article_model.article_data_updated)
 
 
     def refresh(self) -> None:
@@ -245,3 +248,7 @@ class ArticleViewModel(qtc.QAbstractItemModel):
 
     def update_row_unread_status(self, row):
         self.dataChanged.emit(self.index(row, 0), self.index(row, 0), [qtc.Qt.FontRole])
+
+
+    def article_data_updated(self, row):
+        self.dataChanged.emit(qtc.QModelIndex(), qtc.QModelIndex())

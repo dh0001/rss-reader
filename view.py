@@ -26,7 +26,7 @@ class View():
         self.splitter2 : qtw.QSplitter
 
         self.feedManager = mgr
-        self.settingsManager = settings
+        self.settings_manager = settings
 
 
     def cleanup(self) -> None:
@@ -53,8 +53,8 @@ class View():
         main_widget = qtw.QWidget()   
         self.main_window.setCentralWidget(main_widget)
 
-        self.feed_view = FeedView(self.feed_manager)
-        self.article_view = ArticleView(self.feed_manager)
+        self.feed_view = FeedView(self.feedManager)
+        self.article_view = ArticleView(self.feedManager)
 
         self.content_view = TBrowser()
         self.content_view.setOpenExternalLinks(True)
@@ -73,8 +73,8 @@ class View():
         main_widget.setLayout(hbox)
 
         menu_bar = self.main_window.menuBar().addMenu('Options')
-        # menu_bar.addAction("Add feed...").triggered.connect(self.feed_view.prompt_add_feed)
-        # menu_bar.addAction("Add folder...").triggered.connect(self.feed_view.prompt_add_folder)
+        menu_bar.addAction("Add feed...").triggered.connect(self.feed_view.prompt_add_feed)
+        menu_bar.addAction("Add folder...").triggered.connect(self.feed_view.prompt_add_folder)
         menu_bar.addAction("Update All Feeds").triggered.connect(self.refresh_all)
         menu_bar.addAction("Set Global Update Rate").triggered.connect(self.refresh_all)
         # menu_bar.addAction("Refresh Caches").triggered.connect(self.reset_screen)
@@ -93,6 +93,7 @@ class View():
 
         self.feed_view.feed_selected_event.connect(self.article_view.select_feed)
         self.article_view.article_selected_content_event.connect(self.output_content)
+        
         
         
         self.app.exec_()

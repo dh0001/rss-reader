@@ -22,8 +22,9 @@ class FeedView(qtw.QTreeView):
     def __init__(self, fm : feed_manager.FeedManager):
         super().__init__()
 
-        self.feedManager = fm
-        self.feedViewModel = FeedViewModel(self.feedManager.get_feeds_cache())
+        self.feed_manager = fm
+        self.feeds_cache = self.feed_manager.get_feeds_cache()
+        self.feedViewModel = FeedViewModel(self.feeds_cache)
         self.setModel(self.feedViewModel)
         self.selectionModel().selectionChanged.connect(self.fire_selected_event)
         # self.setRootIsDecorated(False)
@@ -31,7 +32,7 @@ class FeedView(qtw.QTreeView):
         self.customContextMenuRequested.connect(self.feed_context_menu)
         self.header().setStretchLastSection(False)
 
-        self.feedManager.feeds_updated_event.connect(self.feed_data_changed)
+        self.feed_manager.feeds_updated_event.connect(self.feed_data_changed)
         self.restore_expand_status()
 
 
@@ -116,7 +117,7 @@ class FeedView(qtw.QTreeView):
                 folder = self.feeds_cache
                 index = qtc.QModelIndex()
             self.feedViewModel.beginInsertRows(index, len(folder.children), len(folder.children))
-            self.feedManager.add_feed_from_web(dialog.get_response(), folder)
+            self.feed_manager.add_feed(dialog.get_response(), folder)
             self.feedViewModel.endInsertRows()
 
             self.setExpanded(index, True)
@@ -131,7 +132,7 @@ class FeedView(qtw.QTreeView):
         response = qtw.QMessageBox.question(None, "Prompt", "Are you sure you want to delete '" + (feed.user_title if feed.user_title != None else feed.title) + "'?", qtw.QMessageBox.Yes | qtw.QMessageBox.No)
         if response == qtw.QMessageBox.Yes:
             self.feedViewModel.beginRemoveRows(index.parent(), feed.row, feed.row)
-            self.feedManager.delete_feed(feed)
+            self.feed_manager.delete_feed(feed)
             self.feedViewModel.endRemoveRows()
 
 
@@ -148,7 +149,7 @@ class FeedView(qtw.QTreeView):
                 folder = self.feeds_cache
                 index = qtc.QModelIndex()
             self.feedViewModel.beginInsertRows(index, len(folder.children), len(folder.children))
-            self.feedManager.add_folder(dialog.get_response(), folder)
+            self.feed_manager.add_folder(dialog.get_response(), folder)
             self.feedViewModel.endInsertRows()
 
 
@@ -163,7 +164,7 @@ class FeedView(qtw.QTreeView):
             else:
                 folder = self.feeds_cache
                 index = qtc.QModelIndex()
-            self.feedManager.rename_folder(dialog.get_response(), folder)
+            self.feed_manager.rename_folder(dialog.get_response(), folder)
             self.feedViewModel.update_row(index)
 
 
@@ -179,7 +180,7 @@ class FeedView(qtw.QTreeView):
 
 
             self.feedViewModel.beginRemoveRows(index.parent(), folder.row, folder.row)
-            self.feedManager.delete_folder(folder)
+            self.feed_manager.delete_folder(folder)
             self.feedViewModel.endRemoveRows()
             self.reset_screen()
 
@@ -194,7 +195,7 @@ class FeedView(qtw.QTreeView):
         dialog = VerifyDialog(lambda x: True, "Title:", "Set Title", feed.user_title if feed.user_title != None else feed.title)
         if (dialog.exec_() == qtw.QDialog.Accepted):
             response = dialog.get_response() if dialog.get_response() != "" else None
-            self.feedManager.set_feed_user_title(feed, response)
+            self.feed_manager.set_feed_user_title(feed, response)
             self.feedViewModel.update_row(index)
 
         
@@ -208,7 +209,7 @@ class FeedView(qtw.QTreeView):
         dialog = VerifyDialog(lambda x: x.isdigit() or x == "", "Refresh Rate (seconds):", "Set Refresh Rate", str(feed.refresh_rate))
         if (dialog.exec_() == qtw.QDialog.Accepted):
             response = int(dialog.get_response()) if dialog.get_response() != "" else None
-            self.feedManager.set_refresh_rate(feed, response)
+            self.feed_manager.set_refresh_rate(feed, response)
             self.feedViewModel.update_row(index)
 
 

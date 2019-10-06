@@ -16,10 +16,11 @@ from sortedcontainers import SortedKeyList
 
 class FeedManager(qtc.QObject):
     """
-    Provides an interface for getting feed and article data. Also manages
-    automatic updating of feeds.
+    Manages the feed data and provides an interface for getting that data. 
     """
 
+    new_article_event = qtc.Signal(feedutility.Article)
+    article_updated_event = qtc.Signal(int)
     feeds_updated_event = qtc.Signal()
 
     def __init__(self, settings: settings.Settings):
@@ -30,9 +31,6 @@ class FeedManager(qtc.QObject):
         self.feed_cache : feedutility.Folder()
 
         self.connection = sqlite3.connect(settings.settings["db_file"], check_same_thread=False)
-        
-        
-        self._time_limit : int = self._settings.settings["default_delete_time"]
 
         self._schedule_lock = threading.Lock()
         self.feed_lock = threading.Lock()
@@ -98,20 +96,36 @@ class FeedManager(qtc.QObject):
         return self.feed_cache
 
 
-    def add_file_from_disk(self, location: str, folder: feedutility.Folder) -> None:
+    def add_feed(self, location: str, folder: feedutility.Folder) -> None:
         """
-        Adds new feed to the database from disk location.
+        Adds a new feed to the specified folder.
         """
-        data = _load_rss_from_disk(location)
-        self._add_feed(data, location, folder)
+
+        # assume it is web uri for now
+        data = _download_xml(location)
+        parsed_completefeed = feedutility.atom_parse(data)
+
+        new_feed = feedutility.Feed()
+        new_feed.__dict__.update(parsed_completefeed.feed.__dict__)
+
+        new_feed.uri = location
+        new_feed.row = len(folder.children)
+        new_feed.parent_folder = folder
+
+        feed_id = self._settings.settings["feed_counter"]
+        self._settings.settings["feed_counter"] += 1
+        new_feed.db_id = feed_id
+
+        folder.children.append(new_feed)
+
+        self._process_new_articles(new_feed, parsed_completefeed.articles)
 
 
-    def add_feed_from_web(self, download_uri: str, folder: feedutility.Folder) -> None:
+    def add_feed_from_variable(self, feed: feedutility.CompleteFeed, folder: feedutility.Folder) -> None:
         """
-        Adds new feed to database from web location.
+        Adds new feed to the folder from variable.
         """
-        data = _download_xml(download_uri)
-        self._add_feed(data, download_uri, folder)
+        self._add_feed(feed, folder)
 
 
     def delete_feed(self, feed: feedutility.Feed) -> None:
@@ -168,11 +182,10 @@ class FeedManager(qtc.QObject):
     def refresh_all(self) -> None:
         """
         Calls refresh_feed on every feed in the cache.
+        Emits feeds_updated_event.
         """
         for feed in self.feed_cache:
             self.refresh_feed(feed)
-        date_cutoff = (datetime.datetime.utcnow() - datetime.timedelta(minutes=self._time_limit)).isoformat()
-        self._delete_old_articles(date_cutoff)
 
 
     def refresh_feed(self, feed: feedutility.Feed) -> None:
@@ -292,33 +305,10 @@ class FeedManager(qtc.QObject):
         Returns a set containing all the article atom id's from the feed with passed feed_id's id.
         """
         c = self.connection.cursor()
-        articles = set()
-        for article in c.execute('''SELECT identifier FROM articles WHERE feed_id = ?''', [feed_id]):
-            articles.add(article[0])
+        articles = {}
+        for article in c.execute('''SELECT identifier, updated FROM articles WHERE feed_id = ?''', [feed_id]):
+            articles[article[0]] = article[1]
         return articles
-
-
-    def _add_feed(self, data: feedutility.CompleteFeed, download_uri: str, folder: feedutility.Folder) -> None:
-        """
-        Parse downloaded atom feed data, then insert the feed data and articles data into the database.
-        """
-        parsed_completefeed = feedutility.atom_parse(data)
-
-        new_feed = feedutility.Feed()
-        new_feed.__dict__.update(parsed_completefeed.feed.__dict__)
-        new_feed.uri = download_uri
-
-        feed_id = self._settings.settings["feed_counter"]
-        self._settings.settings["feed_counter"] += 1
-
-        date_cutoff = (datetime.datetime.utcnow() - datetime.timedelta(minutes=self._time_limit)).isoformat()
-        self._add_articles_to_database(_filter_new_articles(parsed_completefeed.articles, date_cutoff, set()), feed_id)
-        new_feed.unread_count = self._get_unread_articles_count(feed_id)
-        new_feed.db_id = feed_id
-
-        new_feed.row = len(folder.children)
-        new_feed.parent_folder = folder
-        folder.children.append(new_feed)
 
 
     def _add_articles_to_database(self, articles: List[feedutility.Article], feed_id: int) -> None:
@@ -356,28 +346,78 @@ class FeedManager(qtc.QObject):
 
     def _update_feed_with_data(self, feed: feedutility.Feed, new_completefeed: feedutility.CompleteFeed):
         """
-        Updates feed with new data.
+        Recieves updated or new feed data.
         """
+        # update feed
         feed.__dict__.update(new_completefeed.feed.__dict__)
         
-        date_cutoff = (datetime.datetime.utcnow() - datetime.timedelta(minutes=self._time_limit)).isoformat()
-        new_articles = _filter_new_articles(new_completefeed.articles, date_cutoff, self._get_article_identifiers(feed.db_id))
+        # update articles
+        self._process_new_articles(feed, new_completefeed.articles)
+        self.feeds_updated_event.emit()
 
-        for article in new_articles:
+
+    def _update_article(self, article):
+        c = self.connection.cursor()
+        c.execute('''
+        UPDATE articles 
+        SET uri = ?,
+            title = ?,
+            updated = ?,
+            author = ?,
+            author_uri = ?,
+            content = ?,
+            published = ?,
+            unread = ?
+        WHERE identifier = ?''', 
+        [article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published, article.unread, article.identifier])
+        self.connection.commit()
+
+    def _process_new_articles(self, feed, articles):
+        """
+        Processes the articles as new articles of the feed, and adds them to the database.
+        """
+        new_articles = []
+
+        # TODO: handle custom delete policy
+        limit = self._settings.settings["default_delete_time"]
+
+        date_cutoff = (datetime.datetime.utcnow() - datetime.timedelta(minutes=limit)).isoformat()
+        
+        knownIds = self._get_article_identifiers(feed.db_id)
+
+        for article in articles:
+
+            if article.updated < date_cutoff:
+                continue
+
+            # TODO: these lines should not be needed
             article.feed_id = feed.db_id
             article.unread = True
 
-        self._add_articles_to_database(new_articles, feed.db_id)
+            if article.identifier in knownIds:
+                if knownIds[article.identifier] > article.updated:
+                    self._update_article(article)
+                    self.article_updated_event.emit(feed.db_id)
+
+            else:
+                new_articles.append(article)
+                self.new_article_event.emit(article)
+
+        self._delete_old_articles(date_cutoff, feed.db_id)
+
+        if len(new_articles) > 0:
+            self._add_articles_to_database(new_articles, feed.db_id)
+
         feed.unread_count = self._get_unread_articles_count(feed.db_id)
 
 
-    def _delete_old_articles(self, time_limit: str) -> None:
+    def _delete_old_articles(self, time_limit: str, feed_id: int) -> None:
         """
         Deletes articles in the database which are not after the passed time_limit.
         Time_limit is a string with an iso formatted time.
         """
         c = self.connection.cursor()
-        c.execute('''DELETE from articles WHERE updated < ?''', [time_limit])
+        c.execute('''DELETE from articles WHERE updated < ? and feed_id = ?''', [time_limit, feed_id])
         self.connection.commit()
         
 
@@ -510,14 +550,6 @@ class UpdateThread(qtc.QThread):
 
         self.update_feed_event.emit(feed, new_completefeed)
         time.sleep(self.settings.get_global_rate_limit())
-
-
-def _filter_new_articles(articles: List[feedutility.Article], date_cutoff: str, known_ids: set) -> List[feedutility.Article]:
-    """
-    Returns a list containing the articles in 'articles' which have an id which is not part of the known_ids set.
-    """
-    new_articles = [x for x in articles if x.updated > date_cutoff and not x.identifier in known_ids]
-    return new_articles
     
 
 def _download_xml(uri: str) -> any:
