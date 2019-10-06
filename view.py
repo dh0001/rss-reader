@@ -25,7 +25,7 @@ class View():
         self.splitter1 : qtw.QSplitter
         self.splitter2 : qtw.QSplitter
 
-        self.feedManager = mgr
+        self.feed_manager = mgr
         self.settings_manager = settings
 
 
@@ -53,8 +53,8 @@ class View():
         main_widget = qtw.QWidget()   
         self.main_window.setCentralWidget(main_widget)
 
-        self.feed_view = FeedView(self.feedManager)
-        self.article_view = ArticleView(self.feedManager)
+        self.feed_view = FeedView(self.feed_manager)
+        self.article_view = ArticleView(self.feed_manager)
 
         self.content_view = TBrowser()
         self.content_view.setOpenExternalLinks(True)
@@ -92,7 +92,7 @@ class View():
         # self.refresh_all()
 
         self.feed_view.feed_selected_event.connect(self.article_view.select_feed)
-        self.article_view.article_selected_content_event.connect(self.output_content)
+        self.article_view.article_content_event.connect(self.output_content)
         
         
         
@@ -103,7 +103,7 @@ class View():
         """
         Called when the refresh all button is pressed. Tells the feed manager to update all the feeds.
         """
-        self.feedManager.refresh_all()
+        self.feed_manager.refresh_all()
 
 
     # def reset_screen(self) -> None:
@@ -139,13 +139,14 @@ class View():
     #             self.feed_view.setExpanded(index, True)
 
 
-    def prompt_set_feed_refresh_rate(self) -> None:
+    def prompt_set_refresh_rate(self) -> None:
         """
         Opens a dialog which allows the user to set the global refresh rate.
         """
-        dialog = VerifyDialog(lambda x: x.isdigit() or x == "", "Refresh Rate (seconds):", "Set Refresh Rate", "")
+        dialog = VerifyDialog(lambda x: x.isdigit() and int(x) > 0, "Refresh Rate (seconds):", "Set Global Refresh Rate", "")
         if (dialog.exec_() == qtw.QDialog.Accepted):
-            response = int(dialog.get_response()) if dialog.get_response() != "" else None
+            response = int(dialog.get_response())
+            self.feed_manager.set_default_refresh_rate(response)
 
 
 

@@ -17,7 +17,7 @@ class FeedView(qtw.QTreeView):
     """
 
     # event for when the selected feed changes. The integer is the db_id of the feed.
-    feed_selected_event = qtc.Signal(int)
+    feed_selected_event = qtc.Signal(feedutility.Feed)
 
     def __init__(self, fm : feed_manager.FeedManager):
         super().__init__()
@@ -44,7 +44,7 @@ class FeedView(qtw.QTreeView):
 
         # could have been a folder that was selected
         if index.isValid() and type(index.internalPointer()) == feedutility.Feed:
-            self.feed_selected_event.emit(index.internalPointer().db_id)        
+            self.feed_selected_event.emit(index.internalPointer())        
 
 
     def restore_expand_status(self):
@@ -247,8 +247,8 @@ class FeedViewModel(qtc.QAbstractItemModel):
         else:
             parent = self.tree
             
-        if qtc.QAbstractItemModel.hasIndex(self, row, column, parent_index):
-            return qtc.QAbstractItemModel.createIndex(self, row, column, parent.children[row])
+        if self.hasIndex(row, column, parent_index):
+            return self.createIndex(row, column, parent.children[row])
         return qtc.QModelIndex()
 
 

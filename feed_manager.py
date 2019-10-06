@@ -196,13 +196,16 @@ class FeedManager(qtc.QObject):
         self._update_event.set()
 
 
-    def set_article_unread_status(self, article_id: int, status: bool) -> None:
+    def set_article_unread_status(self, feed, article_id, status: bool) -> None:
         """
         Sets the unread status in the database for passed article_id.
         """
+        # TODO: find out if the article has status already set to same value
         c = self.connection.cursor()
         c.execute('''UPDATE articles SET unread = ? WHERE rowid = ?''', [status, article_id])
         self.connection.commit()
+        feed.unread_count = self._get_unread_articles_count(feed)
+        self.feeds_updated_event.emit()
 
 
     def set_refresh_rate(self, feed: feedutility.Feed, rate: Union[int, None]) -> None:
@@ -293,11 +296,11 @@ class FeedManager(qtc.QObject):
         
 
 
-    def _get_unread_articles_count(self, feed_id: int) -> int:
+    def _get_unread_articles_count(self, feed: feedutility.Feed) -> int:
         """
         Return the number of unread articles for the feed with passed feed_id. Sql operation.
         """
-        return self.connection.cursor().execute('''SELECT count(*) FROM articles WHERE unread = 1 AND feed_id = ?''', [feed_id]).fetchone()[0]
+        return self.connection.cursor().execute('''SELECT count(*) FROM articles WHERE unread = 1 AND feed_id = ?''', [feed.db_id]).fetchone()[0]
     
 
     def _get_article_identifiers(self, feed_id: int) -> set:
@@ -372,6 +375,7 @@ class FeedManager(qtc.QObject):
         [article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published, article.unread, article.identifier])
         self.connection.commit()
 
+
     def _process_new_articles(self, feed, articles):
         """
         Processes the articles as new articles of the feed, and adds them to the database.
@@ -408,7 +412,7 @@ class FeedManager(qtc.QObject):
         if len(new_articles) > 0:
             self._add_articles_to_database(new_articles, feed.db_id)
 
-        feed.unread_count = self._get_unread_articles_count(feed.db_id)
+        feed.unread_count = self._get_unread_articles_count(feed)
 
 
     def _delete_old_articles(self, time_limit: str, feed_id: int) -> None:
