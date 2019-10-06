@@ -26,7 +26,7 @@ class ArticleView(qtw.QTreeView):
         self.current_feed : feedutility.Feed = None
 
         # model used by this treeview
-        self.article_model = ArticleViewModel()
+        self.article_model = ArticleViewModel(self)
 
         self.setModel(self.article_model)
         self.header().setStretchLastSection(False)
@@ -129,9 +129,10 @@ class ArticleView(qtw.QTreeView):
 
 
 class ArticleViewModel(qtc.QAbstractItemModel):
-    def __init__(self):
+    def __init__(self, view):
         qtc.QAbstractItemModel.__init__(self)
         self.ar : List[feedutility.Article] = []
+        self.view = view
 
 
     def rowCount(self, index: qtc.QModelIndex):
@@ -206,8 +207,10 @@ class ArticleViewModel(qtc.QAbstractItemModel):
                 }.get(section, None)
 
 
-    def sort(self, column, order=qtc.Qt.AscendingOrder):
+    def sort(self, column, order=qtc.Qt.AscendingOrder, data=None):
         self.beginResetModel()
+        if data:
+            self.ar = data
         order = True if order == qtc.Qt.AscendingOrder else False
         if column == 0:
             self.ar.sort(key=lambda e: e.title, reverse=order)
@@ -237,9 +240,7 @@ class ArticleViewModel(qtc.QAbstractItemModel):
         """
         Resets whats in the display with new articles. Causes unselecting.
         """
-        self.beginResetModel()
-        self.ar = articles
-        self.endResetModel()
+        self.sort(self.view.header().sortIndicatorSection(), self.view.header().sortIndicatorOrder(), articles)
 
 
     def update_row_unread_status(self, index, value):
