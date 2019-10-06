@@ -32,7 +32,6 @@ class ArticleView(qtw.QTreeView):
         self.header().setStretchLastSection(False)
         self.setRootIsDecorated(False)
         self.setSortingEnabled(True)
-
         self.selectionModel().selectionChanged.connect(self.selection_changed)
 
         self.feed_manager.article_updated_event.connect(self.article_model.article_data_updated)

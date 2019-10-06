@@ -33,11 +33,11 @@ class View():
         """
         Saves panel states into settings.
         """
-        self.settings_manager.settings["geometry"] = bytes(self.main_window.saveGeometry().toHex()).decode("utf-8")
-        self.settings_manager.settings["splitter1"] = bytes(self.splitter1.saveState().toHex()).decode("utf-8")
-        self.settings_manager.settings["splitter2"] = bytes(self.splitter2.saveState().toHex()).decode("utf-8")
-        self.settings_manager.settings["article_view_headers"] = bytes(self.article_view.header().saveState().toHex()).decode("utf-8")
-        self.settings_manager.settings["feed_view_headers"] = bytes(self.feed_view.header().saveState().toHex()).decode("utf-8")
+        self.settings_manager.settings["geometry"] = str(self.main_window.saveGeometry().toBase64(), 'utf-8')
+        self.settings_manager.settings["splitter1"] = str(self.splitter1.saveState().toBase64(), 'utf-8')
+        self.settings_manager.settings["splitter2"] = str(self.splitter2.saveState().toBase64(), 'utf-8')
+        self.settings_manager.settings["article_view_headers"] = str(self.article_view.header().saveState().toBase64(), 'utf-8')
+        self.settings_manager.settings["feed_view_headers"] = str(self.feed_view.header().saveState().toBase64(), 'utf-8')
 
 
     def gui(self) -> None:
@@ -81,11 +81,11 @@ class View():
         menu_bar.addSeparator()
         menu_bar.addAction("Exit").triggered.connect(qtc.QCoreApplication.quit)
 
-        self.main_window.restoreGeometry(qtc.QByteArray.fromHex(bytes(self.settings_manager.settings["geometry"], "utf-8")))
-        self.splitter1.restoreState(qtc.QByteArray.fromHex(bytes(self.settings_manager.settings["splitter1"], "utf-8")))
-        self.splitter2.restoreState(qtc.QByteArray.fromHex(bytes(self.settings_manager.settings["splitter2"], "utf-8")))
-        self.feed_view.header().restoreState(qtc.QByteArray.fromHex(bytes(self.settings_manager.settings["feed_view_headers"], "utf-8")))
-        self.article_view.header().restoreState(qtc.QByteArray.fromHex(bytes(self.settings_manager.settings["article_view_headers"], "utf-8")))
+        self.main_window.restoreGeometry(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["geometry"], "utf-8")))
+        self.splitter1.restoreState(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["splitter1"], "utf-8")))
+        self.splitter2.restoreState(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["splitter2"], "utf-8")))
+        self.feed_view.header().restoreState(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["feed_view_headers"], "utf-8")))
+        self.article_view.header().restoreState(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["article_view_headers"], "utf-8")))
 
         self.main_window.show()
         # self.feed_view.refresh()
@@ -144,7 +144,7 @@ class View():
         """
         Opens a dialog which allows the user to set the global refresh rate.
         """
-        dialog = VerifyDialog(lambda x: x.isdigit() and int(x) > 0, "Refresh Rate (seconds):", "Set Global Refresh Rate", "")
+        dialog = VerifyDialog(lambda x: x.isdigit() and int(x) > 0, "Refresh Rate (seconds):", "Set Global Refresh Rate", str(self.settings_manager.settings["refresh_time"]))
         if (dialog.exec_() == qtw.QDialog.Accepted):
             response = int(dialog.get_response())
             self.feed_manager.set_default_refresh_rate(response)

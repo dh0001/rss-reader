@@ -189,10 +189,8 @@ class FeedView(qtw.QTreeView):
     def prompt_set_user_custom_title(self, index: qtc.QModelIndex) -> None:
         """
         Opens a dialog which allows the user to enter a custom title for a feed.
-        Tells the feed manager to set the custom name of the feed in the database.
-        Tells the view to update the row of the passed index.
         """
-        feed = index.internalPointer().data
+        feed = index.internalPointer()
         dialog = VerifyDialog(lambda x: True, "Title:", "Set Title", feed.user_title if feed.user_title != None else feed.title)
         if (dialog.exec_() == qtw.QDialog.Accepted):
             response = dialog.get_response() if dialog.get_response() != "" else None
@@ -203,8 +201,6 @@ class FeedView(qtw.QTreeView):
     def prompt_set_feed_refresh_rate(self, index: qtc.QModelIndex) -> None:
         """
         Opens a dialog which allows the user to set a feed's refresh rate.
-        Tells the feed manager to set the refresh rate of the feed in the database.
-        Tells the view to update the row of the passed index.
         """
         feed = index.internalPointer()
         dialog = VerifyDialog(lambda x: x.isdigit() or x == "", "Refresh Rate (seconds):", "Set Refresh Rate", str(feed.refresh_rate))
