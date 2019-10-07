@@ -14,32 +14,23 @@ from PySide2 import QtCore as qtc
 from sortedcontainers import SortedKeyList
 
 
-class FeedManager():
+class FeedManager(qtc.QObject):
     """
-    Manages the feed objects, and connections to the database.
+    Manages the feed data and provides an interface for getting that data. 
     """
+
+    new_article_event = qtc.Signal(feedutility.Article)
+    article_updated_event = qtc.Signal(feedutility.Article)
+    feeds_updated_event = qtc.Signal()
 
     def __init__(self, settings: settings.Settings):
-        """
-        initialization.
-        """
+        super().__init__()
+
+        self.feed_cache = self._cache_all_feeds()
+
         self._settings = settings
         self._connection = sqlite3.connect(settings.settings["db_file"], check_same_thread=False)
-        self.feed_cache : List[feedutility.Feed]
-
-        self._new_feed_function : any = None
-        self._new_article_function : any = None
-        self._feed_data_changed_function : any = None
-        
-        self._time_limit : int = self._settings.settings["default_delete_time"]
-
-        self._schedule_lock = threading.Lock()
-        self.feed_lock = threading.Lock()
-        self._refresh_schedule : SortedKeyList
-        self._default_refresh_entry : _DefaultFeedRefresh
-        self._update_settings : _UpdateThreadSettings
-        self._scheduler_thread : qtc.Thread
-        self._update_event = threading.Event()
+        self._scheduler_thread = UpdateThread(self)
 
         if self._settings.settings["first-run"] == "true":
             self._create_tables()
@@ -47,13 +38,9 @@ class FeedManager():
             with open ("feeds.json", "w") as f:
                 f.write("[]")
 
-        self._feed_download_queue : queue.SimpleQueue
-        self._feed_download_queue_updated_event = threading.Event()
-        self._download_thread : qtc.Thread
-        self._download_thread_settings : _UpdateThreadSettings
-
-        self._cache_all_feeds()
-        self._start_refresh_thread()
+        self._scheduler_thread.data_downloaded_event.connect(self._update_feed_with_data)
+        self._scheduler_thread.scheduled_default_refresh_event.connect(self.refresh_all)
+        self._scheduler_thread.start()
 
 
     def cleanup(self) -> None:
@@ -61,7 +48,7 @@ class FeedManager():
         Should be called before program exit. Closes db connection and exits threads gracefully.
         """
         self._scheduler_thread.requestInterruption()
-        self._update_event.set()
+        self._scheduler_thread.schedule_update_event.set()
         self._scheduler_thread.wait()
         self._save_all_feeds()
         self._connection.close()
@@ -90,27 +77,36 @@ class FeedManager():
         return articles
 
 
-    def get_all_feeds(self) -> List[feedutility.Feed]:
+    def add_feed(self, location: str, folder: feedutility.Folder) -> None:
         """
-        Returns a list containing all the feeds in the database.
+        Adds a new feed to the specified folder.
         """
-        return self.feed_cache
+
+        # assume it is web uri for now
+        data = _download_xml(location)
+        parsed_completefeed = feedutility.atom_parse(data)
+
+        new_feed = feedutility.Feed()
+        new_feed.__dict__.update(parsed_completefeed.feed.__dict__)
+
+        new_feed.uri = location
+        new_feed.row = len(folder.children)
+        new_feed.parent_folder = folder
+
+        feed_id = self._settings.settings["feed_counter"]
+        self._settings.settings["feed_counter"] += 1
+        new_feed.db_id = feed_id
+
+        folder.children.append(new_feed)
+
+        self._process_new_articles(new_feed, parsed_completefeed.articles)
 
 
-    def add_file_from_disk(self, location: str, folder: feedutility.Folder) -> None:
+    def add_feed_from_variable(self, feed: feedutility.CompleteFeed, folder: feedutility.Folder) -> None:
         """
-        Adds new feed to the database from disk location.
+        Adds new feed to the folder from variable.
         """
-        data = _load_rss_from_disk(location)
-        self._add_feed(data, location, folder)
-
-
-    def add_feed_from_web(self, download_uri: str, folder: feedutility.Folder) -> None:
-        """
-        Adds new feed to database from web location.
-        """
-        data = _download_xml(download_uri)
-        self._add_feed(data, download_uri, folder)
+        self._add_feed(feed, folder)
 
 
     def delete_feed(self, feed: feedutility.Feed) -> None:
@@ -167,43 +163,36 @@ class FeedManager():
     def refresh_all(self) -> None:
         """
         Calls refresh_feed on every feed in the cache.
+        Emits feeds_updated_event.
         """
         for feed in self.feed_cache:
             self.refresh_feed(feed)
-        date_cutoff = (datetime.datetime.utcnow() - datetime.timedelta(minutes=self._time_limit)).isoformat()
-        self._delete_old_articles(date_cutoff)
 
 
     def refresh_feed(self, feed: feedutility.Feed) -> None:
         """
         Adds a feed to the update feed queue.
         """
-        self._feed_download_queue.put(feed)
-        self._update_event.set()
+        self._scheduler_thread.force_refresh_feed(feed)
 
 
-    def set_article_unread_status(self, article_id: int, status: bool) -> None:
+    def set_article_unread_status(self, feed, article_id, status: bool) -> None:
         """
         Sets the unread status in the database for passed article_id.
         """
+        # TODO: find out if the article has status already set to same value
         c = self._connection.cursor()
         c.execute('''UPDATE articles SET unread = ? WHERE rowid = ?''', [status, article_id])
         self._connection.commit()
+        feed.unread_count = self._get_unread_articles_count(feed)
+        self.feeds_updated_event.emit()
 
 
     def set_refresh_rate(self, feed: feedutility.Feed, rate: Union[int, None]) -> None:
         """
         Sets the refresh rate for an individual feed, and sets/resets the scheduled refresh for that feed.
         """
-        with self._schedule_lock:
-            feed.refresh_rate = rate
-            i = next((i for i,v in enumerate(self._refresh_schedule) if v.feed.db_id == feed.db_id), None)
-            if i != None:
-                del self._refresh_schedule[i]
-
-            if rate != None:
-                self._refresh_schedule.add(_FeedRefresh(feed, time.time() + rate))
-                self._update_event.set()
+        self._scheduler_thread.update_refresh_rate(feed, rate)
 
 
     def set_feed_user_title(self, feed: feedutility.Feed, user_title: Union[str, None]) -> None:
@@ -217,11 +206,9 @@ class FeedManager():
         """
         Sets the default refresh rate for feeds and resets the scheduled default refresh.
         """
-        with self._schedule_lock:
-            self._settings.settings["refresh_time"] = rate
-            self._default_refresh_entry.refresh_rate = rate
-            self._default_refresh_entry.scheduled_time = time.time() + rate
-            self._update_event.set()
+        self._settings.settings["refresh_time"] = rate
+        self._scheduler_thread.global_refresh_time_updated()
+        self._scheduler_thread.schedule_update_event.set()
 
 
     def verify_feed_url(self, url: str) -> None:
@@ -235,27 +222,6 @@ class FeedManager():
         except Exception:
             pass
         return False
-
-
-    def set_feed_notify(self, call: any) -> None:
-        """
-        Tells the feed manager to run the passed function when feed information changes. Passes a list of feed.
-        """
-        self._new_feed_function = call
-
-
-    def set_article_notify(self, call: any) -> None:
-        """
-        Tells the feed manager to run the passed function when article information changes. Passes a list of article.
-        """
-        self._new_article_function = call
-
-    
-    def set_feed_data_changed_notify(self, call: any) -> None:
-        """
-        Tells the feed manager to run the passed function when feed information changes. Passes a list of feed.
-        """
-        self._feed_data_changed_function = call
 
 
     def _create_tables(self) -> None:
@@ -288,7 +254,7 @@ class FeedManager():
 
         tree.children = l
         set_parents(tree)
-        self.feed_cache = tree
+        return tree
 
 
     def _save_all_feeds(self):
@@ -300,11 +266,11 @@ class FeedManager():
         
 
 
-    def _get_unread_articles_count(self, feed_id: int) -> int:
+    def _get_unread_articles_count(self, feed: feedutility.Feed) -> int:
         """
         Return the number of unread articles for the feed with passed feed_id. Sql operation.
         """
-        return self._connection.cursor().execute('''SELECT count(*) FROM articles WHERE unread = 1 AND feed_id = ?''', [feed_id]).fetchone()[0]
+        return self._connection.cursor().execute('''SELECT count(*) FROM articles WHERE unread = 1 AND feed_id = ?''', [feed.db_id]).fetchone()[0]
     
 
     def _get_article_identifiers(self, feed_id: int) -> set:
@@ -312,33 +278,10 @@ class FeedManager():
         Returns a set containing all the article atom id's from the feed with passed feed_id's id.
         """
         c = self._connection.cursor()
-        articles = set()
-        for article in c.execute('''SELECT identifier FROM articles WHERE feed_id = ?''', [feed_id]):
-            articles.add(article[0])
+        articles = {}
+        for article in c.execute('''SELECT identifier, updated FROM articles WHERE feed_id = ?''', [feed_id]):
+            articles[article[0]] = article[1]
         return articles
-
-
-    def _add_feed(self, data: feedutility.CompleteFeed, download_uri: str, folder: feedutility.Folder) -> None:
-        """
-        Parse downloaded atom feed data, then insert the feed data and articles data into the database.
-        """
-        parsed_completefeed = feedutility.atom_parse(data)
-
-        new_feed = feedutility.Feed()
-        new_feed.__dict__.update(parsed_completefeed.feed.__dict__)
-        new_feed.uri = download_uri
-
-        feed_id = self._settings.settings["feed_counter"]
-        self._settings.settings["feed_counter"] += 1
-
-        date_cutoff = (datetime.datetime.utcnow() - datetime.timedelta(minutes=self._time_limit)).isoformat()
-        self._add_articles_to_database(_filter_new_articles(parsed_completefeed.articles, date_cutoff, set()), feed_id)
-        new_feed.unread_count = self._get_unread_articles_count(feed_id)
-        new_feed.db_id = feed_id
-
-        new_feed.row = len(folder.children)
-        new_feed.parent_folder = folder
-        folder.children.append(new_feed)
 
 
     def _add_articles_to_database(self, articles: List[feedutility.Article], feed_id: int) -> None:
@@ -376,30 +319,79 @@ class FeedManager():
 
     def _update_feed_with_data(self, feed: feedutility.Feed, new_completefeed: feedutility.CompleteFeed):
         """
-        Updates feed with new data.
+        Recieves updated or new feed data.
         """
+        # update feed
         feed.__dict__.update(new_completefeed.feed.__dict__)
         
-        date_cutoff = (datetime.datetime.utcnow() - datetime.timedelta(minutes=self._time_limit)).isoformat()
-        new_articles = _filter_new_articles(new_completefeed.articles, date_cutoff, self._get_article_identifiers(feed.db_id))
+        # update articles
+        self._process_new_articles(feed, new_completefeed.articles)
+        self.feeds_updated_event.emit()
 
-        for article in new_articles:
+
+    def _update_article(self, article):
+        c = self._connection.cursor()
+        c.execute('''
+        UPDATE articles 
+        SET uri = ?,
+            title = ?,
+            updated = ?,
+            author = ?,
+            author_uri = ?,
+            content = ?,
+            published = ?,
+            unread = ?
+        WHERE identifier = ?''', 
+        [article.uri, article.title, article.updated, article.author, article.author_uri, article.content, article.published, article.unread, article.identifier])
+        self._connection.commit()
+
+
+    def _process_new_articles(self, feed, articles):
+        """
+        Processes the articles as new articles of the feed, and adds them to the database.
+        """
+        new_articles = []
+
+        # TODO: handle custom delete policy
+        limit = self._settings.settings["default_delete_time"]
+
+        date_cutoff = (datetime.datetime.utcnow() - datetime.timedelta(minutes=limit)).isoformat()
+        
+        knownIds = self._get_article_identifiers(feed.db_id)
+
+        for article in articles:
+
+            if article.updated < date_cutoff:
+                continue
+
+            # TODO: these lines should not be needed
             article.feed_id = feed.db_id
             article.unread = True
 
-        self._add_articles_to_database(new_articles, feed.db_id)
-        feed.unread_count = self._get_unread_articles_count(feed.db_id)
+            if article.identifier in knownIds:
+                if knownIds[article.identifier] > article.updated:
+                    self._update_article(article)
+                    self.article_updated_event.emit(article)
 
-        if callable(self._new_article_function):
-            self._new_article_function(new_articles, feed.db_id)
+            else:
+                new_articles.append(article)
+                self.new_article_event.emit(article)
+
+        self._delete_old_articles(date_cutoff, feed.db_id)
+
+        if len(new_articles) > 0:
+            self._add_articles_to_database(new_articles, feed.db_id)
+
+        feed.unread_count = self._get_unread_articles_count(feed)
 
 
-    def _delete_old_articles(self, time_limit: str) -> None:
+    def _delete_old_articles(self, time_limit: str, feed_id: int) -> None:
         """
-        Deletes articles in the database which are not after the passed time_limit. Time_limit is an iso formatted time.
+        Deletes articles in the database which are not after the passed time_limit.
+        Time_limit is a string with an iso formatted time.
         """
         c = self._connection.cursor()
-        c.execute('''DELETE from articles WHERE updated < ?''', [time_limit])
+        c.execute('''DELETE from articles WHERE updated < ? and feed_id = ?''', [time_limit, feed_id])
         self._connection.commit()
         
 
@@ -407,121 +399,75 @@ class FeedManager():
         """
         Removes an item from the refresh schedule.
         """
-        with self._schedule_lock:
-            i = next(i for i,v in enumerate(self._refresh_schedule) if v.feed.db_id == feed.db_id)
-            del self._refresh_schedule[i]
-            self._update_event.set()
-
-
-    def _start_refresh_thread(self) -> None:
-        """
-        Populates individual_refresh_tracker and starts the refresh schedule.
-        """
-        self._refresh_schedule = SortedKeyList(key=lambda x: x.scheduled_time)
-        feeds = self.get_all_feeds()
-        self._feed_download_queue = queue.SimpleQueue()
-
-        for feed in feeds:
-            if feed.refresh_rate != None:
-                self._refresh_schedule.add(_FeedRefresh(feed, time.time() + feed.refresh_rate))
-            
-        self._default_refresh_entry = _DefaultFeedRefresh(self._settings.settings["refresh_time"], time.time() + self._settings.settings["refresh_time"])
-        self._update_settings = _UpdateThreadSettings(self._settings.settings)
-
-        self._scheduler_thread = UpdateThread(self._refresh_schedule, self._update_event, self._default_refresh_entry, self._schedule_lock, self.feed_cache, self.feed_lock, self._feed_download_queue, self._update_settings)
-        self._scheduler_thread.update_feed_event.connect(self._update_feed_with_data)
-        self._scheduler_thread.scheduled_default_refresh_event.connect(self.refresh_all)
-        self._scheduler_thread.start()
-
-
-
-class _FeedRefresh():
-    """
-    Small class holding a feed, and its entry in the scheduler.
-    """
-    __slots__ = 'feed', 'scheduled_time'
-    def __init__(self, feed: feedutility.Feed, scheduled_time: float):
-        self.feed : feedutility.Feed = feed
-        self.scheduled_time : float = scheduled_time
-
-
-class _DefaultFeedRefresh():
-    """
-    Small class to hold the time for default refresh.
-    """
-    __slots__ = 'scheduled_time', 'refresh_rate'
-    def __init__(self, refresh_rate: float, scheduled_time: float):
-        self.scheduled_time : float = scheduled_time
-        self.refresh_rate : float = refresh_rate
-
-
-
-class _UpdateThreadSettings():
-    """
-    Holds the update thread settings.
-    """
-    def __init__(self, settings: dict):
-        self.settings = settings
-        self.lock = threading.Lock()
-    
-    def set_global_rate_limit(self, time: float):
-        with self.lock:
-            self.settings["global_refresh_rate"] = time
-
-    def get_global_rate_limit(self):
-        with self.lock:
-            return self.settings["global_refresh_rate"]
+        i = next(i for i,v in enumerate(self._refresh_schedule) if v.feed.db_id == feed.db_id)
+        del self._refresh_schedule[i]
+        self._scheduler_thread.schedule_update_event.set()
 
 
 
 class UpdateThread(qtc.QThread):
-    update_feed_event = qtc.pyqtSignal(feedutility.Feed, object)
-    scheduled_default_refresh_event = qtc.pyqtSignal()
-    download_error_event = qtc.pyqtSignal()
+    data_downloaded_event = qtc.Signal(feedutility.Feed, object)
+    scheduled_default_refresh_event = qtc.Signal()
+    download_error_event = qtc.Signal()
 
-    def __init__(self, schedule: SortedKeyList, update_event: threading.Event, default_refresh: _DefaultFeedRefresh, schedule_lock: threading.Lock, feed_list: List[feedutility.Feed], feed_lock: threading.Lock, queue: queue.SimpleQueue, settings: _UpdateThreadSettings):
+    class Entry():
+        """
+        Small class holding a feed, and its entry in the scheduler.
+        """
+        __slots__ = 'scheduled', 'time'
+        def __init__(self, scheduled: Union[feedutility.Feed, None], time: float):
+            self.scheduled = scheduled
+            self.time = time
+
+
+    def __init__(self, feed_manager):
         qtc.QThread.__init__(self)
-        self.schedule = schedule
-        self.update_event = update_event
-        self.default_refresh = default_refresh
-        self.schedule_lock = schedule_lock
-        self.feed_list = feed_list
-        self.feed_lock = feed_lock
-        self.refresh_queue = queue
-        self.settings = settings
+
+        self.schedule = SortedKeyList(key=lambda x: x.time)
+        self.schedule_update_event = threading.Event()
+        self.feed_manager = feed_manager
+        self.schedule_lock = threading.Lock()
+        self.queue = queue.SimpleQueue()
+
+        for feed in self.feed_manager.feed_cache:
+            if feed.refresh_rate != None:
+                self.schedule.add(UpdateThread.Entry(feed, time.time() + feed.refresh_rate))
+
+        # entry for global refresh
+        self.schedule.add(UpdateThread.Entry(None, self.feed_manager._settings.settings["refresh_time"] + time.time()))
+
 
     def run(self):
+
         while True:
             if self.isInterruptionRequested():
                 return
 
-            if not self.refresh_queue.empty():
-                self.update_feed(self.refresh_queue.get_nowait())
-                continue
-            
-            else:
-                with self.schedule_lock:
-                    # Scheduled refreshes
-                    if len(self.schedule) > 0 and self.schedule[0].scheduled_time <= time.time():
-                        feed = self.schedule[0].feed
-                        self.update_feed(feed)
-                        self.schedule.add(_FeedRefresh(feed, time.time() + feed.refresh_rate))
-                        del self.schedule[0]
-    
-                    # Default refresh
-                    elif self.default_refresh.scheduled_time <= time.time():
-                        self.scheduled_default_refresh_event.emit()
-                        self.default_refresh.scheduled_time = time.time() + self.default_refresh.refresh_rate
-    
-                # get time to wait
-                if len(self.schedule) > 0:
-                    next_time = min(self.schedule[0].scheduled_time, self.default_refresh.scheduled_time)
-                else:
-                    next_time = self.default_refresh.scheduled_time
+            with self.schedule_lock:
 
-            # wait
-            self.update_event.wait(next_time - time.time())
-            self.update_event.clear()
+                if len(self.schedule) > 0 and self.schedule[0].time <= time.time():
+
+                    if type(self.schedule[0].scheduled) is feedutility.Feed:
+                        feed = self.schedule[0].scheduled
+                        self.queue.put(feed)
+                        self.schedule.add(UpdateThread.Entry(feed, time.time() + feed.refresh_rate))
+                        del self.schedule[0]
+                    
+                    else:
+                        # global refresh
+                        for feed in self.feed_manager.feed_cache:
+                            if feed.refresh_rate == None:
+                                self.queue.put(feed)
+
+                        self.schedule.add(UpdateThread.Entry(None, self.feed_manager._settings.settings["refresh_time"] + time.time()))
+
+            while not self.queue.empty():
+                feed = self.queue.get_nowait()
+                self.update_feed(feed)
+
+            self.schedule_update_event.wait(self.schedule[0].time - time.time())
+            self.schedule_update_event.clear()
+
 
     def update_feed(self, feed: feedutility.Feed):
         try:
@@ -530,16 +476,35 @@ class UpdateThread(qtc.QThread):
             print("Error parsing feed")
             return
 
-        self.update_feed_event.emit(feed, new_completefeed)
-        time.sleep(self.settings.get_global_rate_limit())
+        self.data_downloaded_event.emit(feed, new_completefeed)
+        time.sleep(self.feed_manager._settings.settings["global_refresh_rate"])
 
 
-def _filter_new_articles(articles: List[feedutility.Article], date_cutoff: str, known_ids: set) -> List[feedutility.Article]:
-    """
-    Returns a list containing the articles in 'articles' which have an id which is not part of the known_ids set.
-    """
-    new_articles = [x for x in articles if x.updated > date_cutoff and not x.identifier in known_ids]
-    return new_articles
+    def force_refresh_feed(self, feed):
+        self.queue.put(feed)
+        self.schedule_update_event.set()
+
+
+    def global_refresh_time_updated(self):
+        with self.schedule_lock:
+            i = next((i for i,v in enumerate(self.schedule) if v.scheduled == None))
+            del self.schedule[i]
+            self.schedule.add(UpdateThread.Entry(None, self.feed_manager._settings.settings["refresh_time"] + time.time()))
+            self.schedule_update_event.set()
+
+
+    def update_refresh_rate(self, feed, rate):
+
+        with self.schedule_lock:
+            if feed.refresh_rate != None:
+                i = next((i for i,v in enumerate(self.schedule) if v.scheduled and v.scheduled.db_id == feed.db_id))
+                del self.schedule[i]
+
+            feed.refresh_rate = rate
+            if rate != None:
+                self.schedule.add(UpdateThread.Entry(feed, time.time() + feed.refresh_rate))
+
+        self.schedule_update_event.set()
     
 
 def _download_xml(uri: str) -> any:
@@ -569,10 +534,6 @@ def _load_rss_from_disk(f: str) -> str:
         return rss
 
 
-def _cache_from_file() -> feedutility.Folder:
-    """
-    """
-
 def dict_to_feed_or_folder(d):
     if "children" in d:
         node = feedutility.Folder()
@@ -589,6 +550,7 @@ def _remove_parents(a):
     if "parent_folder" in a.__dict__:
         del a.__dict__["parent_folder"]
     return a.__dict__
+
 
 def set_parents(tree):
     for child in tree.children:

@@ -19,14 +19,14 @@ class Feed:
 
         self.db_id : int = None
         self.row : int = None
-        self.uri : str = None           # the id
+        self.uri : str = None
         self.user_title : str = None
         self.parent_folder : Folder = None
         self.unread_count : int = None
         self.refresh_rate : int = None
 
     def __iter__(self):
-            yield self
+        yield self
 
 
 class FeedData:
