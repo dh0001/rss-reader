@@ -20,7 +20,7 @@ class FeedManager(qtc.QObject):
     """
 
     new_article_event = qtc.Signal(feedutility.Article)
-    article_updated_event = qtc.Signal(int)
+    article_updated_event = qtc.Signal(feedutility.Article)
     feeds_updated_event = qtc.Signal()
 
     def __init__(self, settings: settings.Settings):
@@ -371,7 +371,7 @@ class FeedManager(qtc.QObject):
             if article.identifier in knownIds:
                 if knownIds[article.identifier] > article.updated:
                     self._update_article(article)
-                    self.article_updated_event.emit(feed.db_id)
+                    self.article_updated_event.emit(article)
 
             else:
                 new_articles.append(article)

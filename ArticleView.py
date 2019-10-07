@@ -1,6 +1,7 @@
 import feed as feedutility
 from feed_manager import FeedManager
 import settings
+import operator
 
 import PySide2.QtWidgets as qtw
 import PySide2.QtCore as qtc
@@ -35,6 +36,7 @@ class ArticleView(qtw.QTreeView):
         self.selectionModel().selectionChanged.connect(self.selection_changed)
 
         self.feed_manager.article_updated_event.connect(self.article_model.article_data_updated)
+        self.feed_manager.new_article_event.connect(self.article_model.new_article)
 
 
     def refresh(self) -> None:
@@ -46,18 +48,6 @@ class ArticleView(qtw.QTreeView):
             return
         self.article_model.set_articles(self.feed_manager.get_articles(self.current_feed.db_id))
         return
-
-
-    def receive_new_articles(self, feed_id, articles) -> None:
-        """
-        Receives new articles which the feed_manager has notified it about.
-        feed_id is the id of the feed the articles are associated with.
-        Should only update if the feed_id is the same one which is currently being displayed.
-        """
-        if self._current_feed_id != feed_id:
-            return
-
-        self.article_model.add_articles(articles)
 
 
     def select_feed(self, feed: feedutility.Feed) -> None:
@@ -76,7 +66,8 @@ class ArticleView(qtw.QTreeView):
         index = self.currentIndex()
 
         if index.isValid():
-            self.mark_article_read(index)
+            if index.internalPointer().unread == True:
+                self.mark_article_read(index)
             self.article_content_event.emit(index.internalPointer().content)
 
 
@@ -85,12 +76,7 @@ class ArticleView(qtw.QTreeView):
         Recieves new article data from the feed manager and adds them to the views,
         if the currently highlighted feed is the correct feed.
         """
-        index = self.feed_view.currentIndex()
-        if index.isValid():
-            node = index.internalPointer()
-            if type(node) == feedutility.Feed and node.db_id == feed_id:
-                self.article_model.add_articles(articles)
-        self.feed_data_changed()
+
 
 
     def article_context_menu(self, position) -> None:
@@ -164,7 +150,7 @@ class ArticleViewModel(qtc.QAbstractItemModel):
         return qtc.QModelIndex()
 
 
-    def columnCount(self, in_index):
+    def columnCount(self, in_index=None):
         """
         Returns the number of columns in the model.
         ArticleModel only has 3 columns, title, author, and last updated.
@@ -221,21 +207,6 @@ class ArticleViewModel(qtc.QAbstractItemModel):
         self.endResetModel()
 
 
-    def add_article(self, article: feedutility.Article):
-        """
-        Add a single article to the model.
-        """
-        
-
-    def add_articles(self, articles: List[feedutility.Article]):
-        """
-        Adds multiple articles to the model. Currently only appends to the end.
-        """
-        self.beginInsertRows(qtc.QModelIndex(), len(self.ar), len(self.ar) + len(articles))
-        self.ar += articles
-        self.endInsertRows()
-
-
     def set_articles(self, articles) -> None:
         """
         Resets whats in the display with new articles. Causes unselecting.
@@ -250,5 +221,29 @@ class ArticleViewModel(qtc.QAbstractItemModel):
         self.dataChanged.emit(self.index(row, 0), self.index(row, 0), [qtc.Qt.FontRole])
 
 
-    def article_data_updated(self, row):
-        self.dataChanged.emit(qtc.QModelIndex(), qtc.QModelIndex())
+    def article_data_updated(self, article):
+        """
+        """
+        if self.view.current_feed.db_id == article.feed_id:
+            i = next((i for i,v in enumerate(self.ar) if v.identifier == article.identifier), None)
+            if i != None:
+                self.ar[i].__dict__ = article.__dict__
+                self.dataChanged.emit(self.index(i, 0), self.index(i, self.columnCount()))
+            else:
+                print("Somehow, article was not found when updating")
+
+
+    def new_article(self, article):
+        if self.view.current_feed.db_id == article.feed_id:
+            if self.view.header().sortIndicatorOrder() == qtc.Qt.AscendingOrder:
+                op = operator.gt
+            else:
+                op = operator.lt
+            section = ["title", "author", "updated"][self.view.header().sortIndicatorSection()]
+            
+            i = next((i for i,v in enumerate(self.ar) if op(getattr(article, section), getattr(v, section))), len(self.ar))
+            self.beginInsertRows(qtc.QModelIndex(), i, i+1)
+            self.ar.insert(i, article)
+            self.endInsertRows()
+
+        
