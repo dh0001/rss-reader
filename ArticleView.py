@@ -52,7 +52,7 @@ class ArticleView(qtw.QTreeView):
 
     def select_feed(self, feed: feedutility.Feed) -> None:
         """
-        Changes the view to fetch articles for the new feed. If it is -1,
+        Changes the view to fetch articles for the new feed. If it is None,
         the view will be blank.
         """
         self.current_feed = feed
@@ -224,7 +224,7 @@ class ArticleViewModel(qtc.QAbstractItemModel):
     def article_data_updated(self, article):
         """
         """
-        if self.view.current_feed.db_id == article.feed_id:
+        if self.view.current_feed is not None and self.view.current_feed.db_id == article.feed_id:
             i = next((i for i,v in enumerate(self.ar) if v.identifier == article.identifier), None)
             if i != None:
                 self.ar[i].__dict__ = article.__dict__
@@ -234,7 +234,7 @@ class ArticleViewModel(qtc.QAbstractItemModel):
 
 
     def new_article(self, article):
-        if self.view.current_feed.db_id == article.feed_id:
+        if self.view.current_feed is not None and self.view.current_feed.db_id == article.feed_id:
             if self.view.header().sortIndicatorOrder() == qtc.Qt.AscendingOrder:
                 op = operator.gt
             else:

@@ -12,28 +12,33 @@ from typing import List, Union
 import json
 
 
-class View():
+class View(qtw.QMainWindow):
     """
     Handles all interaction with the user.
     """
 
     def __init__(self, mgr: feed_manager.FeedManager, settings: settings.Settings):
-        self.main_window : qtw.QMainWindow
-        self.article_view : qtw.QTreeView
-        self.feed_view : FeedView
-        self.content_view : qtw.QTextBrowser
-        self.splitter1 : qtw.QSplitter
-        self.splitter2 : qtw.QSplitter
+
+        super().__init__()
 
         self.feed_manager = mgr
         self.settings_manager = settings
+
+        self.article_view = ArticleView(self.feed_manager)
+        self.feed_view = FeedView(self.feed_manager)
+        self.content_view = TBrowser()
+        self.splitter1 = qtw.QSplitter(qtc.Qt.Vertical)
+        self.splitter2 = qtw.QSplitter(qtc.Qt.Horizontal)
+        self.tray_icon = qtw.QSystemTrayIcon()
+
+        self.gui()
 
 
     def cleanup(self) -> None:
         """
         Saves panel states into settings.
         """
-        self.settings_manager.settings["geometry"] = str(self.main_window.saveGeometry().toBase64(), 'utf-8')
+        self.settings_manager.settings["geometry"] = str(self.saveGeometry().toBase64(), 'utf-8')
         self.settings_manager.settings["splitter1"] = str(self.splitter1.saveState().toBase64(), 'utf-8')
         self.settings_manager.settings["splitter2"] = str(self.splitter2.saveState().toBase64(), 'utf-8')
         self.settings_manager.settings["article_view_headers"] = str(self.article_view.header().saveState().toBase64(), 'utf-8')
@@ -44,25 +49,17 @@ class View():
         """
         Starts the GUI. Initializes the window, views, and sets up interactions.
         """
-        self.app = qtw.QApplication([])
 
-        self.main_window = qtw.QMainWindow()
-        self.main_window.setWindowTitle('RSS Reader')
+        self.setWindowTitle('RSS Reader')
         # self.main_window.resize(800, 600)
 
         main_widget = qtw.QWidget()   
-        self.main_window.setCentralWidget(main_widget)
+        self.setCentralWidget(main_widget)
 
-        self.feed_view = FeedView(self.feed_manager)
-        self.article_view = ArticleView(self.feed_manager)
-
-        self.content_view = TBrowser()
         self.content_view.setOpenExternalLinks(True)
 
-        self.splitter1 = qtw.QSplitter(qtc.Qt.Vertical)
         self.splitter1.addWidget(self.article_view)
         self.splitter1.addWidget(self.content_view)
-        self.splitter2 = qtw.QSplitter(qtc.Qt.Horizontal)
         self.splitter2.addWidget(self.feed_view)
         self.splitter2.addWidget(self.splitter1)
         # self.splitter1.setSizes([200, 300])
@@ -72,7 +69,7 @@ class View():
         hbox.addWidget(self.splitter2)
         main_widget.setLayout(hbox)
 
-        menu_bar = self.main_window.menuBar().addMenu('Options')
+        menu_bar = self.menuBar().addMenu('Options')
         menu_bar.addAction("Add feed...").triggered.connect(self.feed_view.prompt_add_feed)
         menu_bar.addAction("Add folder...").triggered.connect(self.feed_view.prompt_add_folder)
         menu_bar.addAction("Update All Feeds").triggered.connect(self.refresh_all)
@@ -81,23 +78,16 @@ class View():
         menu_bar.addSeparator()
         menu_bar.addAction("Exit").triggered.connect(qtc.QCoreApplication.quit)
 
-        self.main_window.restoreGeometry(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["geometry"], "utf-8")))
+        self.restoreGeometry(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["geometry"], "utf-8")))
         self.splitter1.restoreState(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["splitter1"], "utf-8")))
         self.splitter2.restoreState(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["splitter2"], "utf-8")))
         self.feed_view.header().restoreState(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["feed_view_headers"], "utf-8")))
         self.article_view.header().restoreState(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["article_view_headers"], "utf-8")))
 
-        self.main_window.show()
-        # self.feed_view.refresh()
-        # self.refresh_all()
-
         self.feed_view.feed_selected_event.connect(self.article_view.select_feed)
         self.article_view.article_content_event.connect(self.output_content)
-        
-        
-        
-        self.app.exec_()
 
+        self.show()
 
     def refresh_all(self) -> None:
         """

@@ -172,18 +172,14 @@ class FeedView(qtw.QTreeView):
     def prompt_delete_folder(self, index: qtc.QModelIndex) -> None:
         """
         Opens a message box prompt which confirms if the user wants to delete a folder.
-        Deletes the folder from the view then tells the feed manager to remove it from the database.
-        Resets the screen.
         """
         folder = index.internalPointer()
         response = qtw.QMessageBox.question(None, "Prompt", "Are you sure you want to delete '" + folder.title + "'?", qtw.QMessageBox.Yes | qtw.QMessageBox.No)
         if response == qtw.QMessageBox.Yes:
 
-
             self.feedViewModel.beginRemoveRows(index.parent(), folder.row, folder.row)
             self.feed_manager.delete_folder(folder)
             self.feedViewModel.endRemoveRows()
-            self.reset_screen()
 
 
     def prompt_set_user_custom_title(self, index: qtc.QModelIndex) -> None:

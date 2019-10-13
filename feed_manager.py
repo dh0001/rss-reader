@@ -26,7 +26,7 @@ class FeedManager(qtc.QObject):
     def __init__(self, settings: settings.Settings):
         super().__init__()
 
-        self.feed_cache = self._cache_all_feeds()
+        self.feed_cache = self._load_feeds()
 
         self._settings = settings
         self._connection = sqlite3.connect(settings.settings["db_file"], check_same_thread=False)
@@ -208,7 +208,6 @@ class FeedManager(qtc.QObject):
         """
         self._settings.settings["refresh_time"] = rate
         self._scheduler_thread.global_refresh_time_updated()
-        self._scheduler_thread.schedule_update_event.set()
 
 
     def verify_feed_url(self, url: str) -> None:
@@ -243,9 +242,9 @@ class FeedManager(qtc.QObject):
         self._connection.commit()
 
 
-    def _cache_all_feeds(self):
+    def _load_feeds(self):
         """
-        Caches the feeds on the disk.
+        Load feeds from disk.
         """
         tree = feedutility.Folder()
         with open("feeds.json", "rb") as f:
@@ -445,28 +444,37 @@ class UpdateThread(qtc.QThread):
 
             with self.schedule_lock:
 
-                if len(self.schedule) > 0 and self.schedule[0].time <= time.time():
+                if self.schedule[0].time <= time.time():
 
                     if type(self.schedule[0].scheduled) is feedutility.Feed:
                         feed = self.schedule[0].scheduled
                         self.queue.put(feed)
                         self.schedule.add(UpdateThread.Entry(feed, time.time() + feed.refresh_rate))
-                        del self.schedule[0]
                     
                     else:
                         # global refresh
-                        for feed in self.feed_manager.feed_cache:
-                            if feed.refresh_rate == None:
-                                self.queue.put(feed)
-
+                        self.global_refresh(self.feed_manager.feed_cache)
                         self.schedule.add(UpdateThread.Entry(None, self.feed_manager._settings.settings["refresh_time"] + time.time()))
+                    
+                    del self.schedule[0]
 
             while not self.queue.empty():
                 feed = self.queue.get_nowait()
                 self.update_feed(feed)
+                if self.isInterruptionRequested():
+                    return
 
             self.schedule_update_event.wait(self.schedule[0].time - time.time())
             self.schedule_update_event.clear()
+
+        
+    def global_refresh(self, folder):
+        for node in folder:
+            if type(node) is feedutility.Folder:
+                self.global_refresh(node)
+            else:
+                if node.refresh_rate == None:
+                    self.queue.put(node)
 
 
     def update_feed(self, feed: feedutility.Feed):
