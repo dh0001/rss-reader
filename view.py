@@ -78,14 +78,25 @@ class View(qtw.QMainWindow):
         menu_bar.addSeparator()
         menu_bar.addAction("Exit").triggered.connect(qtc.QCoreApplication.quit)
 
+        # Designed by https://www.flaticon.com/authors/freepik from www.flaticon.com
+        self.tray_icon.setIcon(qtg.QIcon("download.png"))
+        tray_menu = qtw.QMenu()
+        tray_menu.addAction("Update All Feeds").triggered.connect(self.refresh_all)
+        tray_menu.addAction("Set Global Update Rate").triggered.connect(self.prompt_set_refresh_rate)
+        tray_menu.addSeparator()
+        tray_menu.addAction("Exit").triggered.connect(qtc.QCoreApplication.quit)
+        self.tray_icon.setContextMenu(tray_menu)
+        self.tray_icon.show()
+        
         self.restoreGeometry(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["geometry"], "utf-8")))
         self.splitter1.restoreState(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["splitter1"], "utf-8")))
         self.splitter2.restoreState(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["splitter2"], "utf-8")))
         self.feed_view.header().restoreState(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["feed_view_headers"], "utf-8")))
         self.article_view.header().restoreState(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["article_view_headers"], "utf-8")))
-
+        
         self.feed_view.feed_selected_event.connect(self.article_view.select_feed)
         self.article_view.article_content_event.connect(self.output_content)
+        self.tray_icon.activated.connect(self.tray_activated)
 
         self.show()
 
@@ -94,6 +105,19 @@ class View(qtw.QMainWindow):
         Called when the refresh all button is pressed. Tells the feed manager to update all the feeds.
         """
         self.feed_manager.refresh_all()
+
+
+    
+    def hideEvent(self, event):
+        self.hide()
+
+    
+
+    def tray_activated(self, reason):
+        if reason == qtw.QSystemTrayIcon.Trigger or reason == qtw.QSystemTrayIcon.DoubleClick:
+            self.show()
+            self.setWindowState(self.windowState() & ~qtc.Qt.WindowMinimized)
+            self.activateWindow()
 
 
     # def reset_screen(self) -> None:

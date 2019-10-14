@@ -18,7 +18,7 @@ view = view_class.View(feed_manager, settings)
 
 
 # start program
-# view.refresh_all()
+view.refresh_all()
 app.exec_()
 
 
@@ -26,3 +26,5 @@ app.exec_()
 feed_manager.cleanup()
 view.cleanup()
 settings.cleanup()
+
+app.quit()
