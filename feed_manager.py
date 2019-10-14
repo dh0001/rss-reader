@@ -163,7 +163,6 @@ class FeedManager(qtc.QObject):
     def refresh_all(self) -> None:
         """
         Calls refresh_feed on every feed in the cache.
-        Emits feeds_updated_event.
         """
         for feed in self.feed_cache:
             self.refresh_feed(feed)

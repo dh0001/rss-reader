@@ -30,7 +30,6 @@ class FeedView(qtw.QTreeView):
         # self.setRootIsDecorated(False)
         self.setContextMenuPolicy(qtc.Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.feed_context_menu)
-        self.header().setStretchLastSection(False)
 
         self.feed_manager.feeds_updated_event.connect(self.feed_data_changed)
         self.restore_expand_status()
