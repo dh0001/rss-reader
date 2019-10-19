@@ -1,29 +1,32 @@
-import defusedxml.ElementTree as ElemTree
-from typing import List, NamedTuple, Union
+from typing import List, Union
 import collections
 from itertools import chain
+import requests
+import defusedxml.ElementTree as defusxml
+
 
 class Feed:
     """
-    Holds information from an RSS feed, and additional data.
+    Holds information for a feed, and its metadata.
     """
-    def __init__(self):
-        self.title : str = None
-        self.author : str = None
-        self.author_uri : str = None
-        self.category : str = None
-        self.updated : str = None
-        self.icon_uri : str = None
-        self.subtitle : str = None
-        self.meta : dict = None
 
-        self.db_id : int = None
-        self.row : int = None
-        self.uri : str = None
-        self.user_title : str = None
-        self.parent_folder : Folder = None
-        self.unread_count : int = None
-        self.refresh_rate : int = None
+    def __init__(self):
+        self.title: str = None
+        self.author: str = None
+        self.author_uri: str = None
+        self.category: str = None
+        self.updated: str = None
+        self.icon_uri: str = None
+        self.subtitle: str = None
+        self.meta: dict = {}
+
+        self.db_id: int = None
+        self.template: str = None
+        self.uri: str = None
+        self.user_title: str = None
+        self.parent_folder: Folder = None
+        self.unread_count: int = None
+        self.refresh_rate: int = None
 
     def __iter__(self):
         yield self
@@ -33,44 +36,46 @@ class FeedData:
     """
     Holds information from an RSS feed.
     """
+
     def __init__(self):
-        self.title : str = None
-        self.author : str = None
-        self.author_uri : str = None
-        self.category : str = None
-        self.updated : str = None
-        self.icon_uri : str = None
-        self.subtitle : str = None
-        self.meta : dict = {}
+        self.title: str = None
+        self.author: str = None
+        self.author_uri: str = None
+        self.category: str = None
+        self.updated: str = None
+        self.icon_uri: str = None
+        self.subtitle: str = None
+        self.meta: dict = {}
 
 
 class Article:
     """
     Holds information from an entry/article in an Atom RSS feed.
     """
-    def __init__(self):
-        self.identifier : str = None    # the id
-        self.uri : str = None           # the first link href
-        self.title : str = None
-        self.updated : str = None
-        self.author : str = None
-        self.author_uri : str = None
-        self.content : str = None
-        self.category : str = None
-        self.published : str = None
-        self.unread : bool = None
-        self.meta : dict = None
 
-        self.db_id : int = None
-        self.feed_id : int = None
+    def __init__(self):
+        self.identifier: str = None    # the id
+        self.uri: str = None           # the first link href
+        self.title: str = None
+        self.updated: str = None
+        self.author: str = None
+        self.author_uri: str = None
+        self.content: str = None
+        self.category: str = None
+        self.published: str = None
+        self.unread: bool = None
+        self.meta: dict = None
+
+        self.db_id: int = None
+        self.feed_id: int = None
 
 
 class Folder:
     """
     Class which holds information about folders.
     """
+
     def __init__(self):
-        self.row = None
         self.title = None
         self.parent_folder = None
         self.children = []
@@ -78,34 +83,91 @@ class Folder:
     def __iter__(self):
         for child in self.children:
             yield from child
-        
 
 
-CompleteFeed = NamedTuple('CompleteFeed', [('feed', FeedData), ('articles', List[Article])])
+class CompleteFeed:
+    __slots__ = 'feed', 'articles'
+
+    def __init__(self):
+        self.feed = FeedData()
+        self.articles = []
 
 
-def _article_append(append_to: CompleteFeed, entry) -> None:
-    """
-    Append an Article object to the list of articles in the CompleteFeed
-    """
-    new_article = Article()
-    for child in entry:
+rss_mapping = {
+    "title": "title",
+    "updated": "updated",
+    "category": "category",
+    "icon": "icon",
+    "subtitle": "subtitle",
+}
+
+rss_article_mapping = {
+    "id": "identifier",
+    "title": "title",
+    "updated": "updated",
+    "content": "content",
+    "category": "category",
+    "published": "published",
+}
+
+
+def rss_template(uri) -> CompleteFeed:
+
+    xml = defusxml.fromstring(download(uri))
+
+    cf = CompleteFeed()
+
+    for child in xml:
         tag = child.tag.split('}', 1)[1]
-        _article_substitute(new_article, child, _article_mapping, tag)
-    append_to.articles.append(new_article)
+
+        if tag in rss_mapping:
+            setattr(cf.feed, rss_mapping[tag], child.text)
+
+        elif tag == 'author':
+            author_insert(cf.feed, child)
+
+        elif tag == 'entry':
+
+            article = Article()
+            for articlechild in child:
+
+                tag = articlechild.tag.split('}', 1)[1]
+
+                if tag in rss_article_mapping:
+                    setattr(article, rss_article_mapping[tag], articlechild.text)
+
+                elif tag == 'link':
+                    article.uri = articlechild.attrib['href']
+
+                elif tag == 'author':
+                    author_insert(article, articlechild)
+
+            cf.articles.append(article)
+
+        else:
+            cf.feed.meta[tag] = child.text
+
+    return cf
 
 
-def _author_cf_insert(to: CompleteFeed, entry) -> None:
+templates = {
+    "rss": rss_template
+}
+
+
+def download(uri: str) -> any:
     """
-    Insert the "name" tag into to.feed.author.
+    Downloads text file with the application's header.
     """
-    for piece in entry:
-        tag = piece.tag.split('}', 1)[1]
-        if (tag == "name"):
-            to.feed.author = piece.text
+    headers = {'User-Agent' : 'python-rss-reader'}
+    return requests.get(uri, headers=headers).text
+    
+
+def get_feed(uri, template):
+    return templates[template](uri)
 
 
-def _author_insert(to, entry) -> None:
+def author_insert(to, entry) -> None:
     """
     Insert the "name" tag entry into to.author.
     """
@@ -113,79 +175,3 @@ def _author_insert(to, entry) -> None:
         tag = piece.tag.split('}', 1)[1]
         if (tag == "name"):
             to.author = piece.text
-
-
-def _link_insert(to: Article, entry) -> None:
-    """
-    Insert the href attribute into to.
-    """
-    to.uri = entry.attrib['href']
-
-
-def _feed_substitute(cf: CompleteFeed, value: any, dictionary: dict, key: str) -> None:
-    """
-    Substitutes the attribute with name corresponding in 'dict' in the feed portion of CompleteFeed 'cf' with 'value'.
-    """
-    if (callable(dictionary[key])):
-        dictionary[key](cf, value)
-    elif (isinstance(dictionary[key], str)):
-        setattr(cf.feed, dictionary[key], value.text)
-    # else:
-    #     cf.feed.meta[key] = value
-
-
-def _article_substitute(obj: object, value: any, dictionary: dict, key: str) -> None:
-    """
-    Substitutes the attribute with name corresponding in 'dict' in object 'obj' with 'value'.
-    """
-    if (callable(dictionary[key])):
-        dictionary[key](obj, value)
-    elif (isinstance(dictionary[key], str)):
-        setattr(obj, dictionary[key], value.text)
-    # else:
-    #     obj.meta[key] = value
-
-
-_feed_mapping = {
-    "id" : None,
-    "title" : "title",
-    "updated" : "updated",
-    "author" : _author_insert,
-    "link" : None,
-    "category" : "category",
-    "contributor" : None,
-    "icon" : "icon",
-    "logo" : None,
-    "rights" : None,
-    "subtitle" : "subtitle",
-    "entry" : _article_append,
-}
-
-_article_mapping = {
-    "id" : "identifier",
-    "title" : "title",
-    "updated" : "updated",
-    "author" : _author_insert,
-    "content" : "content",
-    "link" : _link_insert,
-    "summary" : None,
-    "category" : "category",
-    "contributor" : None,
-    "published" : "published",
-    "rights" : None,
-    "source" : None
-}
-
-
-def atom_parse(parsed_xml) -> CompleteFeed:
-    """
-    Takes in parsed xml "parsed_xml" corresponding to an atom feed, and returns a CompleteFeed, containing the Feed and a list of Article.
-    """
-    cf = CompleteFeed
-    cf.feed = FeedData()
-    cf.articles = []
-    
-    for child in parsed_xml:
-        tag = child.tag.split('}', 1)[1]
-        _feed_substitute(cf, child, _feed_mapping, tag)
-    return cf

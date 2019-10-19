@@ -215,6 +215,12 @@ class FeedView(qtw.QTreeView):
 
 
 class FeedViewModel(qtc.QAbstractItemModel):
+
+    definedrows = {
+                    0: "Feed Name",
+                    1: "Unread"
+                }
+
     def __init__(self, folder: feedutility.Folder):
         qtc.QAbstractItemModel.__init__(self)
         self.tree = folder
@@ -250,8 +256,8 @@ class FeedViewModel(qtc.QAbstractItemModel):
         """
         if index.isValid():
             parent = index.internalPointer().parent_folder
-            if not parent is self.tree:
-                return qtc.QAbstractItemModel.createIndex(self, parent.row, 0, parent)
+            if parent is not self.tree:
+                return qtc.QAbstractItemModel.createIndex(self, parent.parent_folder.children.index(parent), 0, parent)
         return qtc.QModelIndex()
 
 
@@ -300,10 +306,7 @@ class FeedViewModel(qtc.QAbstractItemModel):
     def headerData(self, section, orientation, role=qtc.Qt.DisplayRole):
         if role == qtc.Qt.DisplayRole:
             if orientation == qtc.Qt.Horizontal: # Horizontal
-                return {
-                    0: "Feed Name",
-                    1: "Unread"
-                }.get(section, None)
+                return self.definedrows.get(section, None)
 
 
     def update_row(self, index: qtc.QModelIndex):

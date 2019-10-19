@@ -9,7 +9,6 @@ import PySide2.QtCore as qtc
 import PySide2.QtGui as qtg
 
 from typing import List, Union
-import json
 
 
 class View(qtw.QMainWindow):
@@ -100,6 +99,7 @@ class View(qtw.QMainWindow):
         self.feed_manager.feeds_updated_event.connect(self.update_icon)
 
         self.show()
+
 
     def refresh_all(self) -> None:
         """

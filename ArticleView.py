@@ -115,6 +115,13 @@ class ArticleView(qtw.QTreeView):
 
 
 class ArticleViewModel(qtc.QAbstractItemModel):
+
+    definedrows = {
+        0: "Name",
+        1: "Author",
+        2: "Updated"
+    }
+                
     def __init__(self, view):
         qtc.QAbstractItemModel.__init__(self)
         self.ar : List[feedutility.Article] = []
@@ -186,11 +193,7 @@ class ArticleViewModel(qtc.QAbstractItemModel):
     def headerData(self, section, orientation, role=qtc.Qt.DisplayRole):
         if role == qtc.Qt.DisplayRole:
             if orientation == qtc.Qt.Horizontal:
-                return {
-                    0: "Name",
-                    1: "Author",
-                    2: "Updated"
-                }.get(section, None)
+                return self.definedrows.get(section, None)
 
 
     def sort(self, column, order=qtc.Qt.AscendingOrder, data=None):
@@ -200,9 +203,9 @@ class ArticleViewModel(qtc.QAbstractItemModel):
         order = True if order == qtc.Qt.AscendingOrder else False
         if column == 0:
             self.ar.sort(key=lambda e: e.title, reverse=order)
-        if column == 1:
+        elif column == 1:
             self.ar.sort(key=lambda e: e.author, reverse=order)
-        if column == 2:
+        elif column == 2:
             self.ar.sort(key=lambda e: e.updated, reverse=order)
         self.endResetModel()
 

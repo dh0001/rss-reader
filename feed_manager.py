@@ -1,17 +1,13 @@
 import sqlite3
-import requests
-import defusedxml.ElementTree as defusxml
 import feed as feedutility
 import sched
-import time
-import threading
 import settings
 import json
 import datetime
-import queue
 from typing import List, Union
 from PySide2 import QtCore as qtc
 from sortedcontainers import SortedKeyList
+from FeedUpdater import UpdateThread
 
 
 class FeedManager(qtc.QObject):
@@ -82,16 +78,13 @@ class FeedManager(qtc.QObject):
         Adds a new feed to the specified folder.
         """
 
-        # assume it is web uri for now
-        data = _download_xml(location)
-        parsed_completefeed = feedutility.atom_parse(data)
+        completefeed = feedutility.get_feed(location, "rss")
 
         new_feed = feedutility.Feed()
-        new_feed.__dict__.update(parsed_completefeed.feed.__dict__)
-
+        new_feed.__dict__.update(completefeed.feed)
         new_feed.uri = location
-        new_feed.row = len(folder.children)
         new_feed.parent_folder = folder
+        new_feed.template = "rss"
 
         feed_id = self._settings.settings["feed_counter"]
         self._settings.settings["feed_counter"] += 1
@@ -99,14 +92,7 @@ class FeedManager(qtc.QObject):
 
         folder.children.append(new_feed)
 
-        self._process_new_articles(new_feed, parsed_completefeed.articles)
-
-
-    def add_feed_from_variable(self, feed: feedutility.CompleteFeed, folder: feedutility.Folder) -> None:
-        """
-        Adds new feed to the folder from variable.
-        """
-        self._add_feed(feed, folder)
+        self._process_new_articles(new_feed, completefeed.articles)
 
 
     def delete_feed(self, feed: feedutility.Feed) -> None:
@@ -118,7 +104,6 @@ class FeedManager(qtc.QObject):
             self._refresh_schedule_remove_item(feed)
 
         del feed.parent_folder.children[feed.row]
-        update_rows(feed.parent_folder.children)
 
 
     def add_folder(self, folder_name: str, folder: feedutility.Folder) -> None:
@@ -139,7 +124,6 @@ class FeedManager(qtc.QObject):
         self._delete_feeds_in_folder(folder)
         parent = folder.parent_folder
         del parent.children[folder.row]
-        update_rows(parent.children)
 
     
     def rename_folder(self, name: str, folder: feedutility.Folder) -> None:
@@ -164,8 +148,7 @@ class FeedManager(qtc.QObject):
         """
         Calls refresh_feed on every feed in the cache.
         """
-        for feed in self.feed_cache:
-            self.refresh_feed(feed)
+        self._scheduler_thread.force_refresh_folder(self.feed_cache)
 
 
     def refresh_feed(self, feed: feedutility.Feed) -> None:
@@ -214,8 +197,7 @@ class FeedManager(qtc.QObject):
         Verifies if a url points to a proper feed.
         """
         try:
-            down = _download_xml(url)
-            feedutility.atom_parse(down)
+            feedutility.get_feed(url, "rss")
             return True
         except Exception:
             pass
@@ -403,152 +385,15 @@ class FeedManager(qtc.QObject):
 
 
 
-class UpdateThread(qtc.QThread):
-    data_downloaded_event = qtc.Signal(feedutility.Feed, object)
-    scheduled_default_refresh_event = qtc.Signal()
-    download_error_event = qtc.Signal()
-
-    class Entry():
-        """
-        Small class holding a feed, and its entry in the scheduler.
-        """
-        __slots__ = 'scheduled', 'time'
-        def __init__(self, scheduled: Union[feedutility.Feed, None], time: float):
-            self.scheduled = scheduled
-            self.time = time
-
-
-    def __init__(self, feed_manager):
-        qtc.QThread.__init__(self)
-
-        self.schedule = SortedKeyList(key=lambda x: x.time)
-        self.schedule_update_event = threading.Event()
-        self.feed_manager = feed_manager
-        self.schedule_lock = threading.Lock()
-        self.queue = queue.SimpleQueue()
-
-        for feed in self.feed_manager.feed_cache:
-            if feed.refresh_rate != None:
-                self.schedule.add(UpdateThread.Entry(feed, time.time() + feed.refresh_rate))
-
-        # entry for global refresh
-        self.schedule.add(UpdateThread.Entry(None, self.feed_manager._settings.settings["refresh_time"] + time.time()))
-
-
-    def run(self):
-
-        while True:
-            if self.isInterruptionRequested():
-                return
-
-            with self.schedule_lock:
-
-                if self.schedule[0].time <= time.time():
-
-                    if type(self.schedule[0].scheduled) is feedutility.Feed:
-                        feed = self.schedule[0].scheduled
-                        self.queue.put(feed)
-                        self.schedule.add(UpdateThread.Entry(feed, time.time() + feed.refresh_rate))
-                    
-                    else:
-                        # global refresh
-                        self.global_refresh(self.feed_manager.feed_cache)
-                        self.schedule.add(UpdateThread.Entry(None, self.feed_manager._settings.settings["refresh_time"] + time.time()))
-                    
-                    del self.schedule[0]
-
-            while not self.queue.empty():
-                feed = self.queue.get_nowait()
-                self.update_feed(feed)
-                if self.isInterruptionRequested():
-                    return
-
-            self.schedule_update_event.wait(self.schedule[0].time - time.time())
-            self.schedule_update_event.clear()
-
-        
-    def global_refresh(self, folder):
-        for node in folder:
-            if type(node) is feedutility.Folder:
-                self.global_refresh(node)
-            else:
-                if node.refresh_rate == None:
-                    self.queue.put(node)
-
-
-    def update_feed(self, feed: feedutility.Feed):
-        try:
-            new_completefeed = feedutility.atom_parse(_download_xml(feed.uri))
-        except Exception:
-            print("Error parsing feed")
-            return
-
-        self.data_downloaded_event.emit(feed, new_completefeed)
-        time.sleep(self.feed_manager._settings.settings["global_refresh_rate"])
-
-
-    def force_refresh_feed(self, feed):
-        self.queue.put(feed)
-        self.schedule_update_event.set()
-
-
-    def global_refresh_time_updated(self):
-        with self.schedule_lock:
-            i = next((i for i,v in enumerate(self.schedule) if v.scheduled == None))
-            del self.schedule[i]
-            self.schedule.add(UpdateThread.Entry(None, self.feed_manager._settings.settings["refresh_time"] + time.time()))
-            self.schedule_update_event.set()
-
-
-    def update_refresh_rate(self, feed, rate):
-
-        with self.schedule_lock:
-            if feed.refresh_rate != None:
-                i = next((i for i,v in enumerate(self.schedule) if v.scheduled and v.scheduled.db_id == feed.db_id))
-                del self.schedule[i]
-
-            feed.refresh_rate = rate
-            if rate != None:
-                self.schedule.add(UpdateThread.Entry(feed, time.time() + feed.refresh_rate))
-
-        self.schedule_update_event.set()
-    
-
-def _download_xml(uri: str) -> any:
-    """
-    Downloads file indicated by 'uri' using requests library, with a User-Agent header.
-    """
-    headers = {'User-Agent' : 'python-rss-reader-side-project'}
-    file = requests.get(uri, headers=headers)
-    return defusxml.fromstring(file.text)
-
-
-def write_string_to_file(str: str) -> None:
-    """
-    Write string to the file named Output.xml.
-    """
-    text_file = open("Output.xml", "w", encoding="utf-8")
-    text_file.write(str)
-    return
-
-
-def _load_rss_from_disk(f: str) -> str:
-    """
-    Returns content in file "f".
-    """
-    with open(f, "rb") as file:
-        rss = file.read().decode("utf-8")
-        return rss
-
 
 def dict_to_feed_or_folder(d):
     if "children" in d:
         node = feedutility.Folder()
-        node.__dict__ = d
+        node.__dict__.update(d)
         return node
     if "author_uri" in d:
         feed = feedutility.Feed()
-        feed.__dict__ = d
+        feed.__dict__.update(d)
         return feed
     return d
 
@@ -564,8 +409,3 @@ def set_parents(tree):
         child.parent_folder = tree
         if type(child) == feedutility.Folder:
             set_parents(child)
-
-
-def update_rows(l: list):
-    for i,node in enumerate(l):
-        node.row = i

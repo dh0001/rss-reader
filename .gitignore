@@ -1,17 +1,12 @@
 
 *
-!feed.py
-!rss_reader.py
-!settings.py
-!sql_feed_manager.py
-!feed_manager.py
-!view.py
-!FeedView.py
-!ArticleView.py
 !.gitignore
+!*.py
+!download.png
+!new.png
 !defaultsettings.json
-.vscode
 
+.vscode
 
 
 # Windows image file caches
