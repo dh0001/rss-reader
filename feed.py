@@ -94,20 +94,33 @@ class CompleteFeed:
 
 
 rss_mapping = {
+    # "id": None,
     "title": "title",
     "updated": "updated",
+    # "author": author_insert,
+    # "link": None,
     "category": "category",
+    # "contributor": None,
     "icon": "icon",
+    # "logo": None,
+    # "rights": None,
     "subtitle": "subtitle",
+    # "entry": article_append,
 }
 
 rss_article_mapping = {
     "id": "identifier",
     "title": "title",
     "updated": "updated",
+    # "author": author_insert,
     "content": "content",
+    # "link": link_insert,
+    # "summary": None,
     "category": "category",
+    # "contributor": None,
     "published": "published",
+    # "rights": None,
+    # "source": None
 }
 
 

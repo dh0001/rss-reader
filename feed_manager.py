@@ -24,13 +24,13 @@ class FeedManager(qtc.QObject):
 
         self.feed_cache = self._load_feeds()
 
-        self._settings = settings
+        self.settings = settings
         self._connection = sqlite3.connect(settings.settings["db_file"], check_same_thread=False)
-        self._scheduler_thread = UpdateThread(self)
+        self._scheduler_thread = UpdateThread(self.feed_cache, self.settings)
 
-        if self._settings.settings["first-run"] == "true":
+        if self.settings.settings["first-run"] == "true":
             self._create_tables()
-            self._settings.settings["first-run"] = "false"
+            self.settings.settings["first-run"] = "false"
             with open ("feeds.json", "w") as f:
                 f.write("[]")
 
@@ -86,8 +86,8 @@ class FeedManager(qtc.QObject):
         new_feed.parent_folder = folder
         new_feed.template = "rss"
 
-        feed_id = self._settings.settings["feed_counter"]
-        self._settings.settings["feed_counter"] += 1
+        feed_id = self.settings.settings["feed_counter"]
+        self.settings.settings["feed_counter"] += 1
         new_feed.db_id = feed_id
 
         folder.children.append(new_feed)
@@ -188,7 +188,7 @@ class FeedManager(qtc.QObject):
         """
         Sets the default refresh rate for feeds and resets the scheduled default refresh.
         """
-        self._settings.settings["refresh_time"] = rate
+        self.settings.settings["refresh_time"] = rate
         self._scheduler_thread.global_refresh_time_updated()
 
 
@@ -333,7 +333,7 @@ class FeedManager(qtc.QObject):
         new_articles = []
 
         # TODO: handle custom delete policy
-        limit = self._settings.settings["default_delete_time"]
+        limit = self.settings.settings["default_delete_time"]
 
         date_cutoff = (datetime.datetime.utcnow() - datetime.timedelta(minutes=limit)).isoformat()
         
