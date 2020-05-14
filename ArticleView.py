@@ -7,12 +7,13 @@ import PySide2.QtWidgets as qtw
 import PySide2.QtCore as qtc
 import PySide2.QtGui as qtg
 
-from typing import List, Union
+from typing import List, Union, Optional
 
 
 class ArticleView(qtw.QTreeView):
-    """
-    A view for displaying articles. article_selected_event fires when an article is selected.
+    """A view for displaying articles. 
+    
+    article_selected_event fires when an article is selected.
     """
 
     article_content_event = qtc.Signal(str)
@@ -34,15 +35,14 @@ class ArticleView(qtw.QTreeView):
         self.setRootIsDecorated(False)
         self.setSortingEnabled(True)
         self.selectionModel().selectionChanged.connect(self.selection_changed)
+        self.setAlternatingRowColors(True)
 
         self.feed_manager.article_updated_event.connect(self.article_model.article_data_updated)
         self.feed_manager.new_article_event.connect(self.article_model.new_article)
 
 
     def refresh(self) -> None:
-        """
-        Refreshes the data in the ArticleView using feed_manager.
-        """
+        """Refreshes the data in the ArticleView using feed_manager."""
         if self.current_feed == None:
             self.article_model.set_articles([])
             return
@@ -50,18 +50,19 @@ class ArticleView(qtw.QTreeView):
         return
 
 
-    def select_feed(self, feed: feedutility.Feed) -> None:
-        """
-        Changes the view to fetch articles for the new feed. If it is None,
-        the view will be blank.
+    def select_feed(self, feed: Optional[feedutility.Feed]) -> None:
+        """Changes which feed's articles should be shown in the view.
+        
+        If feed is unspecified, the view will be blank.
         """
         self.current_feed = feed
         self.refresh()
 
 
     def selection_changed(self) -> None:
-        """
-        Fires article_selected_event with the current selection.
+        """Fires article_selected_event with the current selection.
+        
+        Should only be called from an event.
         """
         index = self.currentIndex()
 
@@ -72,17 +73,15 @@ class ArticleView(qtw.QTreeView):
 
 
     def recieve_new_articles(self, articles: List[feedutility.Article], feed_id: int) -> None:
-        """
-        Recieves new article data from the feed manager and adds them to the views,
-        if the currently highlighted feed is the correct feed.
+        """Recieves new article data from the feed manager and adds them to the views.
+
+        Only adds articles which are the same as the currently highlighted feed
         """
 
 
 
     def article_context_menu(self, position) -> None:
-        """
-        Outputs the context menu for items in the article view.
-        """
+        """Outputs the context menu for items in the article view."""
         index = self.feed_view.indexAt(position)
         
         if index.isValid():
@@ -98,18 +97,14 @@ class ArticleView(qtw.QTreeView):
 
     
     def mark_article_read(self, index) -> None:
-        """
-        Tells the feed manager to mark the indicated article as read.
-        """
-        self.feed_manager.set_article_unread_status(self.current_feed, index.internalPointer().db_id, False)
+        """Tells the feed manager to mark the indicated article as read."""
+        self.feed_manager.set_article_unread_status(self.current_feed, index.internalPointer().identifier, False)
         self.article_model.update_row_unread_status(index, False)
 
 
     def mark_article_unread(self, index) -> None:
-        """
-        Tells the feed manager to mark the indicated article as unread.
-        """
-        self.feed_manager.set_article_unread_status(index.internalPointer().db_id, True)
+        """Tells the feed manager to mark the indicated article as unread."""
+        self.feed_manager.set_article_unread_status(index.internalPointer().identifier, True)
         self.article_model.update_row_unread_status(index, True)
 
 
@@ -129,9 +124,7 @@ class ArticleViewModel(qtc.QAbstractItemModel):
 
 
     def rowCount(self, index: qtc.QModelIndex):
-        """
-        Returns the number of rows.
-        """
+        """Returns the number of rows."""
         # so index points to an article
         if index.isValid():
             return 0
@@ -141,34 +134,30 @@ class ArticleViewModel(qtc.QAbstractItemModel):
 
 
     def index(self, row, column, parent_index=qtc.QModelIndex()):
-        """
-        Returns QModelIndex for given row/column.
-        """
+        """Returns QModelIndex for given row/column."""
         if not self.hasIndex(row, column, parent_index):
             return qtc.QModelIndex()
         return self.createIndex(row, column, self.ar[row])
 
 
     def parent(self, in_index):
-        """
-        Returns parent of a node. 
+        """Returns parent of a node. 
+
         Articles do not have children so returns an invalid index.
         """
         return qtc.QModelIndex()
 
 
     def columnCount(self, in_index=None):
-        """
-        Returns the number of columns in the model.
+        """Returns the number of columns in the model.
+
         ArticleModel only has 3 columns, title, author, and last updated.
         """
         return 3
 
 
     def data(self, in_index, role):
-        """
-        Returns data about an index.
-        """
+        """Returns data about an index."""
         if not in_index.isValid():
             return None
 
@@ -211,22 +200,21 @@ class ArticleViewModel(qtc.QAbstractItemModel):
 
 
     def set_articles(self, articles) -> None:
-        """
-        Resets whats in the display with new articles. Causes unselecting.
+        """Resets whats in the display with new articles. 
+        
+        Causes unselecting.
         """
         self.sort(self.view.header().sortIndicatorSection(), self.view.header().sortIndicatorOrder(), articles)
 
 
     def update_row_unread_status(self, index, value):
-
         row = index.row()
         index.internalPointer().unread = value
         self.dataChanged.emit(self.index(row, 0), self.index(row, 0), [qtc.Qt.FontRole])
 
 
     def article_data_updated(self, article):
-        """
-        """
+        """"""
         if self.view.current_feed is not None and self.view.current_feed.db_id == article.feed_id:
             i = next((i for i,v in enumerate(self.ar) if v.identifier == article.identifier), None)
             if i != None:

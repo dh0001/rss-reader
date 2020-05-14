@@ -11,22 +11,33 @@ from sortedcontainers import SortedKeyList
 
 
 class UpdateThread(qtc.QThread):
-    data_downloaded_event = qtc.Signal(feedutility.CompleteFeed, object)
+    data_downloaded_event = qtc.Signal(feedutility.Feed, feedutility.Feed, list)
     scheduled_default_refresh_event = qtc.Signal()
     download_error_event = qtc.Signal()
 
 
     class Entry():
-        """
-        Small class holding a feed, and its entry in the scheduler.
-        """
+        """Entries in the scheduler.
+        
+        Holds a feed, and the time it should be refreshed.
+        A value of `None` for feed indicates it the entry for global refresh."""
         __slots__ = 'scheduled', 'time'
-        def __init__(self, scheduled: Union[feedutility.Feed, None], time: float):
-            self.scheduled = scheduled
+        def __init__(self, scheduled: Union[feedutility.Feed, None], time: int):
+            self.scheduled = scheduled  # a value of None indicates global refresh
             self.time = time
 
 
-    def __init__(self, feeds, settings):
+    def __init__(self, feeds: feedutility.Folder, settings: settings.Settings):
+        """
+        Parameters
+        ----------
+
+        feeds : feedutility.Folder
+            a Folder containing all the feeds that will be in the scheduler.
+
+        settings : settings.Settings
+            the settings for the application.
+        """
         qtc.QThread.__init__(self)
 
         self.schedule = SortedKeyList(key=lambda x: x.time)
@@ -45,7 +56,6 @@ class UpdateThread(qtc.QThread):
 
 
     def run(self):
-
         while True:
             if self.isInterruptionRequested():
                 return
@@ -87,8 +97,8 @@ class UpdateThread(qtc.QThread):
 
     def update_feed(self, feed: feedutility.Feed):
         try:
-            completefeed = feedutility.get_feed(feed.uri, feed.template)
-            self.data_downloaded_event.emit(feed, completefeed)
+            updated_feed, articles = feedutility.get_feed(feed.uri, feed.template)
+            self.data_downloaded_event.emit(feed, updated_feed, articles)
         except Exception:
             print("Error parsing feed", feed.uri)
 
@@ -96,16 +106,16 @@ class UpdateThread(qtc.QThread):
 
 
     def force_refresh_folder(self, folder):
-        self.force_refresh_folder_noset(folder)
+
+        def folder_refresh(folder):
+            for node in folder:
+                if type(node) is feedutility.Folder:
+                    folder_refresh(node)
+                else:
+                    self.queue.put(node)
+
+        folder_refresh(folder)
         self.schedule_update_event.set()
-
-
-    def force_refresh_folder_noset(self, folder):
-        for node in folder:
-            if type(node) is feedutility.Folder:
-                self.force_refresh_folder_noset(node)
-            else:
-                self.queue.put(node)
 
 
     def force_refresh_feed(self, feed):

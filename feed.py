@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Union, Tuple
 import collections
 from itertools import chain
 import requests
@@ -6,74 +6,50 @@ import defusedxml.ElementTree as defusxml
 
 
 class Feed:
-    """
-    Holds information for a feed, and its metadata.
-    """
+    """Holds information for a feed, and its metadata."""
 
     def __init__(self):
         self.title: str = None
-        self.author: str = None
-        self.author_uri: str = None
-        self.category: str = None
-        self.updated: str = None
-        self.icon_uri: str = None
-        self.subtitle: str = None
         self.meta: dict = {}
 
+        # attributes used by feed_manager
+        self.updated: str = None    # TODO should there be a last fetch time and an updated attribute?
         self.db_id: int = None
         self.template: str = None
         self.uri: str = None
         self.user_title: str = None
         self.parent_folder: Folder = None
-        self.unread_count: int = None
         self.refresh_rate: int = None
+        
 
     def __iter__(self):
         yield self
 
 
-class FeedData:
-    """
-    Holds information from an RSS feed.
-    """
-
-    def __init__(self):
-        self.title: str = None
-        self.author: str = None
-        self.author_uri: str = None
-        self.category: str = None
-        self.updated: str = None
-        self.icon_uri: str = None
-        self.subtitle: str = None
-        self.meta: dict = {}
+    def update(self, feed: 'Feed'):
+        self.title = feed.title
+        self.meta.update(feed.meta)
 
 
 class Article:
-    """
-    Holds information from an entry/article in an Atom RSS feed.
-    """
+    """Holds information from an entry/article in an Atom RSS feed."""
 
     def __init__(self):
-        self.identifier: str = None    # the id
-        self.uri: str = None           # the first link href
+        self.identifier: str = None
         self.title: str = None
         self.updated: str = None
-        self.author: str = None
-        self.author_uri: str = None
         self.content: str = None
-        self.category: str = None
-        self.published: str = None
-        self.unread: bool = None
-        self.meta: dict = None
+        self.author: str = None
+        self.uri: str = None
+        self.meta: dict = {}
 
-        self.db_id: int = None
+        # attributes used by feed_manager
         self.feed_id: int = None
+        self.unread: bool = None
 
 
 class Folder:
-    """
-    Class which holds information about folders.
-    """
+    """Class which holds information about folders for use in feed_manager."""
 
     def __init__(self):
         self.title = None
@@ -85,106 +61,125 @@ class Folder:
             yield from child
 
 
-class CompleteFeed:
-    __slots__ = 'feed', 'articles'
+# def rss_template(uri: str) -> Tuple[Feed, List[Article]]:
+#     """RSS data reader for the feed reader.
 
-    def __init__(self):
-        self.feed = FeedData()
-        self.articles = []
+#     The uri of an article is set to the first uri tag that appears in the article.
+#     """
+
+#     def parse_author(author) -> dict:
+#         """Returns a dict with data for an author."""
+#         a = {}
+#         for tag in author:
+#             a[tag.tag.split('}', 1)[1]] = tag.text
+#         return a
+
+#     rss_article_mapping={
+#     "id": "identifier",
+#     "title": "title",
+#     "updated": "updated",
+#     "content": "content",
+#     "category": "category",
+#     "published": "published",
+#     }
+
+#     xml = defusxml.fromstring(download(uri).text)
+
+#     feed = Feed()
+#     articles = []
+
+#     # feed
+#     for feed_tag in xml:
+#         tag_name = feed_tag.tag.split('}', 1)[1]
+
+#         if tag_name == "title":
+#             feed.title = feed_tag.text
+
+#         elif tag_name == 'author':
+#             feed.meta["author"] = parse_author(feed_tag)
+
+#         # article
+#         elif tag_name == 'entry':
+
+#             article = Article()
+#             for article_tag in feed_tag:
+
+#                 article_tag_name = article_tag.tag.split('}', 1)[1]
+
+#                 if article_tag_name in rss_article_mapping:
+#                     setattr(article, rss_article_mapping[article_tag_name], article_tag.text)
+
+#                 elif article_tag_name == 'link':
+#                     article.uri = article_tag.attrib['href']
+
+#                 elif article_tag_name == 'author':
+#                     article.author = parse_author(article_tag)["name"]
+
+#                 else:
+#                     article.meta[article_tag_name] = feed_tag.text
+
+#             articles.append(article)
+
+#         else:
+#             feed.meta[tag_name] = feed_tag.text
+
+#     return feed, articles
 
 
-rss_mapping = {
-    # "id": None,
-    "title": "title",
-    "updated": "updated",
-    # "author": author_insert,
-    # "link": None,
-    "category": "category",
-    # "contributor": None,
-    "icon": "icon",
-    # "logo": None,
-    # "rights": None,
-    "subtitle": "subtitle",
-    # "entry": article_append,
-}
+def atom_rss_template(uri: str) -> Tuple[Feed, List[Article]]:
+    """Atom RSS data reader for the feed reader.
 
-rss_article_mapping = {
-    "id": "identifier",
-    "title": "title",
-    "updated": "updated",
-    # "author": author_insert,
-    "content": "content",
-    # "link": link_insert,
-    # "summary": None,
-    "category": "category",
-    # "contributor": None,
-    "published": "published",
-    # "rights": None,
-    # "source": None
-}
+    The uri/author of an article is set to the first link/author tag found.
+    """
+    xml_feed = defusxml.fromstring(download(uri).text)
 
+    feed = Feed()
+    feed.title = xml_feed.find("{http://www.w3.org/2005/Atom}title").text
 
-def rss_template(uri) -> CompleteFeed:
+    # author
+    top_author = xml_feed.find("{http://www.w3.org/2005/Atom}author")
+    if top_author is not None:
+        top_author = top_author.find("{http://www.w3.org/2005/Atom}name").text
+    else:
+        top_author = ""
 
-    xml = defusxml.fromstring(download(uri))
+    articles = []
+    xml_articles = xml_feed.findall("{http://www.w3.org/2005/Atom}entry")
+    for xml_article in xml_articles:
+        article = Article()
 
-    cf = CompleteFeed()
-
-    for child in xml:
-        tag = child.tag.split('}', 1)[1]
-
-        if tag in rss_mapping:
-            setattr(cf.feed, rss_mapping[tag], child.text)
-
-        elif tag == 'author':
-            author_insert(cf.feed, child)
-
-        elif tag == 'entry':
-
-            article = Article()
-            for articlechild in child:
-
-                tag = articlechild.tag.split('}', 1)[1]
-
-                if tag in rss_article_mapping:
-                    setattr(article, rss_article_mapping[tag], articlechild.text)
-
-                elif tag == 'link':
-                    article.uri = articlechild.attrib['href']
-
-                elif tag == 'author':
-                    author_insert(article, articlechild)
-
-            cf.articles.append(article)
-
+        # article author
+        author = xml_article.find("{http://www.w3.org/2005/Atom}author")
+        if author is not None:
+            article.author = author.find("{http://www.w3.org/2005/Atom}name").text
         else:
-            cf.feed.meta[tag] = child.text
+            author = top_author
+        
+        article.identifier = xml_article.find("{http://www.w3.org/2005/Atom}id").text
+        article.title = xml_article.find("{http://www.w3.org/2005/Atom}title").text
+        article.updated = xml_article.find("{http://www.w3.org/2005/Atom}updated").text
+        article.content = xml_article.find("{http://www.w3.org/2005/Atom}content").text
+        article.uri = xml_article.find("{http://www.w3.org/2005/Atom}link").attrib["href"]
+        articles.append(article)
 
-    return cf
+    return feed, articles
 
 
 templates = {
-    "rss": rss_template
+    "rss": atom_rss_template
 }
 
 
 def download(uri: str) -> any:
-    """
-    Downloads text file with the application's header.
-    """
+    """Downloads text file with the application's header."""
     headers = {'User-Agent' : 'python-rss-reader'}
-    return requests.get(uri, headers=headers).text
+    return requests.get(uri, headers=headers)
     
 
 def get_feed(uri, template):
+    """"""
     return templates[template](uri)
 
 
-def author_insert(to, entry) -> None:
-    """
-    Insert the "name" tag entry into to.author.
-    """
-    for piece in entry:
-        tag = piece.tag.split('}', 1)[1]
-        if (tag == "name"):
-            to.author = piece.text
+if __name__ == "__main__":
+    a = get_feed("https://www.reddit.com/.rss", "rss")

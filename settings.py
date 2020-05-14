@@ -18,8 +18,6 @@ class Settings():
 
 
     def cleanup(self) -> None:
-        """
-        Outputs settings to file.
-        """
+        """Outputs settings to file."""
         with open (self._settings_file, "w") as f:
             f.write(json.dumps(self.settings, indent=4))
