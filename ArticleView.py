@@ -167,7 +167,7 @@ class ArticleViewModel(qtc.QAbstractItemModel):
             if in_index.column() == 1:
                 return self.ar[in_index.row()].author
             if in_index.column() == 2:
-                return self.ar[in_index.row()].updated
+                return self.ar[in_index.row()].updated.astimezone().strftime('%a %b %d, %Y %I:%M %p')
         
         elif role == qtc.Qt.FontRole:
             f = qtg.QFont()
@@ -199,7 +199,7 @@ class ArticleViewModel(qtc.QAbstractItemModel):
         self.endResetModel()
 
 
-    def set_articles(self, articles) -> None:
+    def set_articles(self, articles: List[feedutility.Article]) -> None:
         """Resets whats in the display with new articles. 
         
         Causes unselecting.
