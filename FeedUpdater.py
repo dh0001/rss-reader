@@ -5,6 +5,7 @@ import threading
 import settings
 import datetime
 import queue
+import logging
 from typing import List, Union
 from PySide2 import QtCore as qtc
 from sortedcontainers import SortedKeyList
@@ -100,7 +101,7 @@ class UpdateThread(qtc.QThread):
             updated_feed, articles = feedutility.get_feed(feed.uri, feed.template)
             self.data_downloaded_event.emit(feed, updated_feed, articles)
         except Exception:
-            print("Error parsing feed", feed.uri)
+            logging.error(f"Error parsing feed {feed.uri}")
 
         time.sleep(self.settings.settings["global_refresh_rate"])
 

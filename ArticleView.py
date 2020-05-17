@@ -2,6 +2,7 @@ import feed as feedutility
 from feed_manager import FeedManager
 import settings
 import operator
+import logging
 
 import PySide2.QtWidgets as qtw
 import PySide2.QtCore as qtc
@@ -221,7 +222,7 @@ class ArticleViewModel(qtc.QAbstractItemModel):
                 self.ar[i].__dict__ = article.__dict__
                 self.dataChanged.emit(self.index(i, 0), self.index(i, self.columnCount()))
             else:
-                print("Somehow, article was not found when updating")
+                logging.error("Article was updated in manager, but not already in view")
 
 
     def new_article(self, article):
