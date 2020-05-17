@@ -131,7 +131,7 @@ class UpdateThread(qtc.QThread):
             self.schedule_update_event.set()
 
 
-    def update_refresh_rate(self, feed, rate):
+    def update_refresh_rate(self, feed: feedutility.Feed, rate: Union[int, None]):
 
         with self.schedule_lock:
             if feed.refresh_rate != None:

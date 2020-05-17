@@ -13,4 +13,4 @@ Open source RSS Reader application. Written in Python 3.
 
 ## Usage
 
-Run `rss_reader.py` using python 3. Reset by deleting feeds.db and settings.json.
+Run `rss_reader.py` using python 3. Reset by deleting articles.db and settings.json.

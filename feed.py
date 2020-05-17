@@ -15,13 +15,13 @@ class Feed:
         self.meta: dict = {}
 
         # attributes used by feed_manager
-        self.updated: str = None    # TODO should there be a last fetch time and an updated attribute?
+        self.updated: str = None    # TODO this value currently unused. should there be a last fetch time and an updated attribute?
         self.db_id: int = None
         self.template: str = None
         self.uri: str = None
-        self.user_title: str = None
+        self.user_title: Union[str, None] = None
         self.parent_folder: Folder = None
-        self.refresh_rate: int = None
+        self.refresh_rate: Union[int, None] = None
         
 
     def __iter__(self):

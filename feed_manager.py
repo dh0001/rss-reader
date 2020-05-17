@@ -26,7 +26,8 @@ class FeedManager(qtc.QObject):
         self.feed_cache = self._load_feeds()
 
         self.settings = settings
-        self._connection = sqlite3.connect(settings.settings["db_file"], check_same_thread=False)
+        self._connection = sqlite3.connect(settings.settings["db_file"])
+        self._connection.row_factory = sqlite3.Row
 
         # create and start scheduler thread
         self._scheduler_thread = UpdateThread(self.feed_cache, self.settings)
@@ -61,18 +62,17 @@ class FeedManager(qtc.QObject):
         Returns:
             A list of articles with the corresponding feed_id.
         """
-        c = self._connection.cursor()
         articles = []
-        for row in c.execute('''SELECT * FROM articles WHERE feed_id = ?''', [feed_id]):
+        for row in self._connection.execute('SELECT identifier, uri, title, updated, author, content, unread FROM articles WHERE feed_id = ?', [feed_id]):
             article = feedutility.Article()
-            article.feed_id = row[0]
-            article.identifier = row[1]
-            article.uri = row[2]
-            article.title = row[3]
-            article.updated = datetime.datetime.fromtimestamp(row[4], datetime.timezone.utc)
-            article.author = row[5]
-            article.content = row[6]
-            article.unread = row[7]
+            article.feed_id = feed_id
+            article.identifier = row['identifier']
+            article.uri = row['uri']
+            article.title = row['title']
+            article.updated = datetime.datetime.fromtimestamp(row['updated'], datetime.timezone.utc)
+            article.author = row['author']
+            article.content = row['content']
+            article.unread = bool(row['unread'])
             articles.append(article)
         return articles
 
@@ -151,9 +151,7 @@ class FeedManager(qtc.QObject):
     def set_article_unread_status(self, feed: feedutility.Feed, article_identifier: str, status: bool) -> None:
         """Sets the unread status in the database for an article."""
         # TODO: find out if the article has status already set to same value
-        c = self._connection.cursor()
-        c.execute('''UPDATE articles SET unread = ? WHERE identifier = ?''', [status, article_identifier])
-        self._connection.commit()
+        self._connection.execute('''UPDATE articles SET unread = ? WHERE identifier = ?''', [status, article_identifier])
         feed.unread_count = self._get_unread_articles_count(feed)
         self.feeds_updated_event.emit()
 
@@ -187,10 +185,7 @@ class FeedManager(qtc.QObject):
 
     def _initialize_database(self) -> None:
         """Creates all the tables used."""
-        c = self._connection.cursor()
-        
-        # sqlite hos no boolean data type
-        c.execute('''CREATE TABLE articles (
+        self._connection.execute('''CREATE TABLE articles (
             feed_id INTEGER,
             identifier TEXT,
             uri TEXT,
@@ -198,8 +193,7 @@ class FeedManager(qtc.QObject):
             updated FLOAT,
             author TEXT,
             content TEXT,
-            unread INTEGER)''')     # sqlite hos no boolean data type
-        self._connection.commit()
+            unread BOOLEAN)''')
 
 
     def _load_feeds(self):
@@ -249,15 +243,14 @@ class FeedManager(qtc.QObject):
 
     def _get_unread_articles_count(self, feed: feedutility.Feed) -> int:
         """Return the number of unread articles for a feed."""
-        return self._connection.cursor().execute('''SELECT count(*) FROM articles WHERE unread = 1 AND feed_id = ?''', [feed.db_id]).fetchone()[0]
+        return self._connection.execute('''SELECT count(*) FROM articles WHERE unread = 1 AND feed_id = ?''', [feed.db_id]).fetchone()[0]
     
 
     def _get_article_identifiers(self, feed_id: int) -> set:
         """Returns a set containing all the identifiers of all articles for a feed."""
-        c = self._connection.cursor()
         articles = {}
-        for article in c.execute('''SELECT identifier, updated FROM articles WHERE feed_id = ?''', [feed_id]):
-            articles[article[0]] = datetime.datetime.fromtimestamp(article[1], datetime.timezone.utc)
+        for article in self._connection.execute('''SELECT identifier, updated FROM articles WHERE feed_id = ?''', [feed_id]):
+            articles[article['identifier']] = datetime.datetime.fromtimestamp(article['updated'], datetime.timezone.utc)
         return articles
 
 
@@ -265,11 +258,10 @@ class FeedManager(qtc.QObject):
         """Add a list of articles to the database.
         
         All articles will be marked as unread."""
-        c = self._connection.cursor()
-        for article in articles:
-            c.execute('''INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                [feed_id, article.identifier, article.uri, article.title, article.updated.timestamp(), article.author, article.content, 1])
-        self._connection.commit()
+        with self._connection:
+            for article in articles:
+                self._connection.execute('''INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                    [feed_id, article.identifier, article.uri, article.title, article.updated.timestamp(), article.author, article.content, 1])
 
 
     def _update_feed_with_data(self, feed: feedutility.Feed, new_feed_data: feedutility.Feed, articles: List[feedutility.Article]):
@@ -282,20 +274,21 @@ class FeedManager(qtc.QObject):
         self.feeds_updated_event.emit()
 
 
-    def _update_article(self, article):
+    def _update_articles(self, articles):
         """Updates an existing article in the database."""
-        c = self._connection.cursor()
-        c.execute('''
-        UPDATE articles 
-        SET uri = ?,
-            title = ?,
-            updated = ?,
-            author = ?,
-            content = ?,
-            unread = ?
-        WHERE identifier = ?''', 
-        [article.uri, article.title, article.updated.timestamp(), article.author, article.content, article.unread, article.identifier])
-        self._connection.commit()
+        with self._connection:
+            for article in articles:
+                self._connection.execute('''
+                UPDATE articles 
+                SET uri = ?,
+                    title = ?,
+                    updated = ?,
+                    author = ?,
+                    content = ?,
+                    unread = ?
+                WHERE identifier = ?''', 
+                [article.uri, article.title, article.updated.timestamp(), article.author, article.content, article.unread, 
+                article.identifier])
 
 
     def _process_new_articles(self, feed, articles):
@@ -316,6 +309,7 @@ class FeedManager(qtc.QObject):
         knownIds = self._get_article_identifiers(feed.db_id)
 
         new_articles = []
+        updated_articles = []
         for article in articles:
 
             if date_cutoff is not None and article.updated < date_cutoff:
@@ -324,24 +318,22 @@ class FeedManager(qtc.QObject):
             if article.identifier in knownIds:
                 if knownIds[article.identifier] > article.updated:
                     self._update_article(article)
-                    self.article_updated_event.emit(article)
+                    updated_articles.append(article)
 
             else:
                 self.new_article_event.emit(article)
                 new_articles.append(article)
 
+        self._update_articles(updated_articles)
+        map(self.article_updated_event.emit, updated_articles)
         self._add_articles_to_database(new_articles, feed.db_id)
 
         feed.unread_count = self._get_unread_articles_count(feed)
 
 
     def _delete_old_articles(self, cutoff_time: datetime.datetime, feed_id: int) -> None:
-        """Deletes articles in the database which are not after the passed time_limit.
-        
-        Time_limit is a string with an iso 8601 formatted time."""
-        c = self._connection.cursor()
-        c.execute('''DELETE from articles WHERE updated < ? and feed_id = ?''', [cutoff_time.timestamp(), feed_id])
-        self._connection.commit()
+        """Deletes articles in the database which are not after the passed time_limit."""
+        self._connection.execute('''DELETE from articles WHERE updated < ? and feed_id = ?''', [cutoff_time.timestamp(), feed_id])
         
 
     def _refresh_schedule_remove_item(self, feed: feedutility.Feed) -> None:

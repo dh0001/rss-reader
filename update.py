@@ -51,9 +51,6 @@ for row in con_new_articles.execute('SELECT feed_id, identifier, uri, title, upd
     article.unread = bool(row['unread'])
     articles_new.append(article)
 
-print(bool(articles_new[0].unread))
-
-
 q = datetime.timedelta(0)
 
 for i,a in enumerate(articles_old):
