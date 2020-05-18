@@ -13,7 +13,6 @@ from sortedcontainers import SortedKeyList
 
 class UpdateThread(qtc.QThread):
     data_downloaded_event = qtc.Signal(feedutility.Feed, feedutility.Feed, list)
-    scheduled_default_refresh_event = qtc.Signal()
     download_error_event = qtc.Signal()
 
 

@@ -39,7 +39,6 @@ class FeedManager(qtc.QObject):
                 f.write("[]")
 
         self._scheduler_thread.data_downloaded_event.connect(self._update_feed_with_data)
-        self._scheduler_thread.scheduled_default_refresh_event.connect(self.refresh_all)
         self._scheduler_thread.start()
 
 
@@ -94,6 +93,7 @@ class FeedManager(qtc.QObject):
 
         self._process_new_articles(feed, articles)
         self.feeds_updated_event.emit()
+        self._save_feeds()
 
 
     def delete_feed(self, feed: feedutility.Feed) -> None:
@@ -106,6 +106,7 @@ class FeedManager(qtc.QObject):
 
         assert feed.parent_folder.children.index(feed) != -1, "Folder was not found when trying to delete it!"
         del feed.parent_folder.children[feed.parent_folder.children.index(feed)]
+        self._save_feeds()
 
 
     def add_folder(self, folder_name: str, folder: feedutility.Folder) -> None:
@@ -114,6 +115,7 @@ class FeedManager(qtc.QObject):
         new_folder.title = folder_name
         new_folder.parent_folder = folder
         folder.children.append(new_folder)
+        self._save_feeds()
 
 
     def delete_folder(self, folder: feedutility.Folder) -> None:
@@ -130,12 +132,13 @@ class FeedManager(qtc.QObject):
         _delete_feeds_in_folder(folder)
         assert folder.parent_folder.children.index(folder) != -1, "Folder was not found when trying to delete it!"
         del folder.parent_folder.children[folder.parent_folder.children.index(folder)]
+        self._save_feeds()
 
     
     def rename_folder(self, name: str, folder: feedutility.Folder) -> None:
         """Changes the name of a folder."""
         folder.title = name
-        #TODO: sync
+        self._save_feeds()
 
 
     def refresh_all(self) -> None:
@@ -166,6 +169,7 @@ class FeedManager(qtc.QObject):
     def set_feed_user_title(self, feed: feedutility.Feed, user_title: Union[str, None]) -> None:
         """Sets a user specified title for a feed."""
         feed.user_title = user_title
+        self._save_feeds()
 
 
     def set_default_refresh_rate(self, rate: int) -> None:
@@ -231,13 +235,10 @@ class FeedManager(qtc.QObject):
     def _save_feeds(self):
         """Saves the feeds to disk."""
 
-        def _remove_parents(a):
-            if "parent_folder" in a.__dict__:
-                del a.__dict__["parent_folder"]
-            return a.__dict__
+        unsavable = ["parent_folder"]
 
         with open ("feeds.json", "w") as f:
-            f.write(json.dumps(self.feed_cache.children, default=lambda o: _remove_parents(o), indent=4))
+            f.write(json.dumps(self.feed_cache.children, default=lambda o: {k:v for k,v in o.__dict__.items() if k not in unsavable}, indent=4))
         
 
 
