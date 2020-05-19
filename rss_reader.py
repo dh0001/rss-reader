@@ -7,17 +7,17 @@ import logging
 
 # own modules
 import feed_manager
-import view as view_class
-import settings as settings_class
+import view
+import settings
 
 
 # initialization
 app = qtw.QApplication([])
 
 logging.basicConfig(filename="log.txt", filemode="a", format="%(asctime)s %(levelname)s:%(message)s")
-settings = settings_class.Settings("settings.json")
-feed_manager = feed_manager.FeedManager(settings)
-view = view_class.View(feed_manager, settings)
+settings.init_settings()
+feed_manager = feed_manager.FeedManager(settings.settings)
+view = view.View(feed_manager)
 
 
 try:
@@ -28,7 +28,7 @@ try:
     # cleanup
     feed_manager.cleanup()
     view.cleanup()
-    settings.cleanup()
+    settings.save_settings()
 except:
     logging.exception("Exception thrown!")
 

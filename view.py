@@ -1,6 +1,6 @@
-import feed as feedutility
+from feed import Feed
 import feed_manager
-import settings
+from settings import settings
 from FeedView import FeedView, VerifyDialog
 from ArticleView import ArticleView
 
@@ -12,16 +12,13 @@ from typing import List, Union
 
 
 class View(qtw.QMainWindow):
-    """
-    Handles all interaction with the user.
-    """
+    """Handles all interaction with the user."""
 
-    def __init__(self, mgr: feed_manager.FeedManager, settings: settings.Settings):
+    def __init__(self, mgr: feed_manager.FeedManager):
 
         super().__init__()
 
         self.feed_manager = mgr
-        self.settings_manager = settings
 
         self.article_view = ArticleView(self.feed_manager)
         self.feed_view = FeedView(self.feed_manager)
@@ -34,21 +31,19 @@ class View(qtw.QMainWindow):
 
 
     def cleanup(self) -> None:
-        """
-        Saves panel states into settings.
-        """
-        self.settings_manager.settings["geometry"] = str(self.saveGeometry().toBase64(), 'utf-8')
-        self.settings_manager.settings["splitter1"] = str(self.splitter1.saveState().toBase64(), 'utf-8')
-        self.settings_manager.settings["splitter2"] = str(self.splitter2.saveState().toBase64(), 'utf-8')
-        self.settings_manager.settings["article_view_headers"] = str(self.article_view.header().saveState().toBase64(), 'utf-8')
-        self.settings_manager.settings["feed_view_headers"] = str(self.feed_view.header().saveState().toBase64(), 'utf-8')
+        """Saves panel states into settings."""
+        settings["geometry"] = str(self.saveGeometry().toBase64(), 'utf-8')
+        settings["splitter1"] = str(self.splitter1.saveState().toBase64(), 'utf-8')
+        settings["splitter2"] = str(self.splitter2.saveState().toBase64(), 'utf-8')
+        settings["article_view_headers"] = str(self.article_view.header().saveState().toBase64(), 'utf-8')
+        settings["feed_view_headers"] = str(self.feed_view.header().saveState().toBase64(), 'utf-8')
 
 
     def gui(self) -> None:
+        """Starts the GUI. 
+        
+        Initializes the window, views, and sets up interactions.
         """
-        Starts the GUI. Initializes the window, views, and sets up interactions.
-        """
-
         self.setWindowTitle('RSS Reader')
         # self.main_window.resize(800, 600)
 
@@ -86,11 +81,11 @@ class View(qtw.QMainWindow):
         self.tray_icon.setContextMenu(tray_menu)
         self.tray_icon.show()
         
-        self.restoreGeometry(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["geometry"], "utf-8")))
-        self.splitter1.restoreState(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["splitter1"], "utf-8")))
-        self.splitter2.restoreState(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["splitter2"], "utf-8")))
-        self.feed_view.header().restoreState(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["feed_view_headers"], "utf-8")))
-        self.article_view.header().restoreState(qtc.QByteArray.fromBase64(bytes(self.settings_manager.settings["article_view_headers"], "utf-8")))
+        self.restoreGeometry(qtc.QByteArray.fromBase64(bytes(settings["geometry"], "utf-8")))
+        self.splitter1.restoreState(qtc.QByteArray.fromBase64(bytes(settings["splitter1"], "utf-8")))
+        self.splitter2.restoreState(qtc.QByteArray.fromBase64(bytes(settings["splitter2"], "utf-8")))
+        self.feed_view.header().restoreState(qtc.QByteArray.fromBase64(bytes(settings["feed_view_headers"], "utf-8")))
+        self.article_view.header().restoreState(qtc.QByteArray.fromBase64(bytes(settings["article_view_headers"], "utf-8")))
         
         self.feed_view.header().setSectionResizeMode(qtw.QHeaderView.Interactive)
         self.feed_view.feed_selected_event.connect(self.article_view.select_feed)
@@ -122,7 +117,7 @@ class View(qtw.QMainWindow):
     def get_folder_unread_count(self, folder):
         count = 0
         for node in folder:
-            if type(node) is feedutility.Feed:
+            if type(node) is Feed:
                 count += node.unread_count
             else:
                 count += self.get_folder_unread_count(node)
@@ -148,7 +143,7 @@ class View(qtw.QMainWindow):
         """
         Opens a dialog which allows the user to set the global refresh rate.
         """
-        dialog = VerifyDialog(lambda x: x.isdigit() and int(x) > 0, "Refresh Rate (seconds):", "Set Global Refresh Rate", str(self.settings_manager.settings["refresh_time"]))
+        dialog = VerifyDialog(lambda x: x.isdigit() and int(x) > 0, "Refresh Rate (seconds):", "Set Global Refresh Rate", str(settings["refresh_time"]))
         if (dialog.exec_() == qtw.QDialog.Accepted):
             response = int(dialog.get_response())
             self.feed_manager.set_default_refresh_rate(response)

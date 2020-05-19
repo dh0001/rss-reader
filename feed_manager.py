@@ -1,7 +1,6 @@
 import sqlite3
-import feed as feedutility
+from feed import Feed, Article, Folder, get_feed
 import sched
-import settings
 import json
 import datetime
 from typing import List, Union
@@ -14,11 +13,11 @@ import dateutil.parser
 class FeedManager(qtc.QObject):
     """Manages the feed data and provides an interface for getting that data."""
 
-    new_article_event = qtc.Signal(feedutility.Article)
-    article_updated_event = qtc.Signal(feedutility.Article)
+    new_article_event = qtc.Signal(Article)
+    article_updated_event = qtc.Signal(Article)
     feeds_updated_event = qtc.Signal()
 
-    def __init__(self, settings: settings.Settings):
+    def __init__(self, settings: dict):
         super().__init__()
 
         # feed_cache is a folder, and the 'root' folder for the feed manager.
@@ -26,15 +25,15 @@ class FeedManager(qtc.QObject):
         self.feed_cache = self._load_feeds()
 
         self.settings = settings
-        self._connection = sqlite3.connect(settings.settings["db_file"])
+        self._connection = sqlite3.connect(self.settings["db_file"])
         self._connection.row_factory = sqlite3.Row
 
         # create and start scheduler thread
         self._scheduler_thread = UpdateThread(self.feed_cache, self.settings)
 
-        if self.settings.settings["first-run"] == "true":
+        if self.settings["first-run"] == "true":
             self._initialize_database()
-            self.settings.settings["first-run"] = "false"
+            self.settings["first-run"] = "false"
             with open ("feeds.json", "w") as f:
                 f.write("[]")
 
@@ -52,7 +51,7 @@ class FeedManager(qtc.QObject):
         self._connection.close()
 
 
-    def get_articles(self, feed_id: int) -> List[feedutility.Article]:
+    def get_articles(self, feed_id: int) -> List[Article]:
         """Returns a list containing all the articles with feed_id.
 
         Args:
@@ -63,7 +62,7 @@ class FeedManager(qtc.QObject):
         """
         articles = []
         for row in self._connection.execute('SELECT identifier, uri, title, updated, author, content, unread FROM articles WHERE feed_id = ?', [feed_id]):
-            article = feedutility.Article()
+            article = Article()
             article.feed_id = feed_id
             article.identifier = row['identifier']
             article.uri = row['uri']
@@ -76,18 +75,18 @@ class FeedManager(qtc.QObject):
         return articles
 
 
-    def add_feed(self, location: str, folder: feedutility.Folder) -> None:
+    def add_feed(self, location: str, folder: Folder) -> None:
         """Verify that a feed is valid, and adds it to the folder."""
 
-        feed, articles = feedutility.get_feed(location, "rss")
+        feed, articles = get_feed(location, "rss")
 
         feed.uri = location
         feed.parent_folder = folder
         feed.template = "rss"
 
         # feed_counter should always be free
-        feed.db_id = self.settings.settings["feed_counter"]
-        self.settings.settings["feed_counter"] += 1
+        feed.db_id = self.settings["feed_counter"]
+        self.settings["feed_counter"] += 1
         
         folder.children.append(feed)
 
@@ -96,7 +95,7 @@ class FeedManager(qtc.QObject):
         self._save_feeds()
 
 
-    def delete_feed(self, feed: feedutility.Feed) -> None:
+    def delete_feed(self, feed: Feed) -> None:
         """Removes a feed from the feed_manager.
 
         Removes a feed with passed feed_id, and its entry from the refresh schedule.
@@ -109,22 +108,22 @@ class FeedManager(qtc.QObject):
         self._save_feeds()
 
 
-    def add_folder(self, folder_name: str, folder: feedutility.Folder) -> None:
+    def add_folder(self, folder_name: str, folder: Folder) -> None:
         """Adds a folder."""
-        new_folder = feedutility.Folder()
+        new_folder = Folder()
         new_folder.title = folder_name
         new_folder.parent_folder = folder
         folder.children.append(new_folder)
         self._save_feeds()
 
 
-    def delete_folder(self, folder: feedutility.Folder) -> None:
+    def delete_folder(self, folder: Folder) -> None:
         """Deletes a folder."""
 
-        def _delete_feeds_in_folder(folder: feedutility.Folder) -> None:
+        def _delete_feeds_in_folder(folder: Folder) -> None:
             """Deletes all feeds in a folder recursively."""
             for child in folder.children:
-                if type(child) == feedutility.Feed:
+                if type(child) == Feed:
                     self.delete_feed(child)
                 else:
                     _delete_feeds_in_folder(child)
@@ -135,7 +134,7 @@ class FeedManager(qtc.QObject):
         self._save_feeds()
 
     
-    def rename_folder(self, name: str, folder: feedutility.Folder) -> None:
+    def rename_folder(self, name: str, folder: Folder) -> None:
         """Changes the name of a folder."""
         folder.title = name
         self._save_feeds()
@@ -146,12 +145,12 @@ class FeedManager(qtc.QObject):
         self._scheduler_thread.force_refresh_folder(self.feed_cache)
 
 
-    def refresh_feed(self, feed: feedutility.Feed) -> None:
+    def refresh_feed(self, feed: Feed) -> None:
         """Adds a feed to the update feed queue."""
         self._scheduler_thread.force_refresh_feed(feed)
 
 
-    def set_article_unread_status(self, feed: feedutility.Feed, article_identifier: str, status: bool) -> None:
+    def set_article_unread_status(self, feed: Feed, article_identifier: str, status: bool) -> None:
         """Sets the unread status in the database for an article."""
         # TODO: find out if the article has status already set to same value
         self._connection.execute('''UPDATE articles SET unread = ? WHERE identifier = ?''', [status, article_identifier])
@@ -159,14 +158,14 @@ class FeedManager(qtc.QObject):
         self.feeds_updated_event.emit()
 
 
-    def set_refresh_rate(self, feed: feedutility.Feed, rate: Union[int, None]) -> None:
+    def set_refresh_rate(self, feed: Feed, rate: Union[int, None]) -> None:
         """Sets the refresh rate for an individual feed.
         
         and sets/resets the scheduled refresh for that feed."""
         self._scheduler_thread.update_refresh_rate(feed, rate)
 
 
-    def set_feed_user_title(self, feed: feedutility.Feed, user_title: Union[str, None]) -> None:
+    def set_feed_user_title(self, feed: Feed, user_title: Union[str, None]) -> None:
         """Sets a user specified title for a feed."""
         feed.user_title = user_title
         self._save_feeds()
@@ -174,14 +173,14 @@ class FeedManager(qtc.QObject):
 
     def set_default_refresh_rate(self, rate: int) -> None:
         """Sets the default refresh rate for feeds and resets the scheduled default refresh."""
-        self.settings.settings["refresh_time"] = rate
+        self.settings["refresh_time"] = rate
         self._scheduler_thread.global_refresh_time_updated()
 
 
     def verify_feed_url(self, url: str) -> bool:
         """Verifies if a url points to a proper feed."""
         try:
-            feedutility.get_feed(url, "rss")
+            get_feed(url, "rss")
             return True
         except Exception:
             return False
@@ -207,23 +206,23 @@ class FeedManager(qtc.QObject):
             """recursively set parents"""
             for child in tree.children:
                 child.parent_folder = tree
-                if type(child) == feedutility.Folder:
+                if type(child) == Folder:
                     set_parents(child)
 
 
         def _dict_to_feed_or_folder(d):
             if "children" in d:
-                node = feedutility.Folder()
+                node = Folder()
                 node.__dict__ = d
                 return node
             elif "title" in d:
-                feed = feedutility.Feed()
+                feed = Feed()
                 feed.__dict__ = d
                 return feed
             return d
 
 
-        folder = feedutility.Folder()
+        folder = Folder()
         with open("feeds.json", "rb") as f:
             s = f.read().decode("utf-8")
             folder.children = json.loads(s, object_hook=_dict_to_feed_or_folder)
@@ -242,7 +241,7 @@ class FeedManager(qtc.QObject):
         
 
 
-    def _get_unread_articles_count(self, feed: feedutility.Feed) -> int:
+    def _get_unread_articles_count(self, feed: Feed) -> int:
         """Return the number of unread articles for a feed."""
         return self._connection.execute('''SELECT count(*) FROM articles WHERE unread = 1 AND feed_id = ?''', [feed.db_id]).fetchone()[0]
     
@@ -255,7 +254,7 @@ class FeedManager(qtc.QObject):
         return articles
 
 
-    def _add_articles_to_database(self, articles: List[feedutility.Article], feed_id: int) -> None:
+    def _add_articles_to_database(self, articles: List[Article], feed_id: int) -> None:
         """Add a list of articles to the database.
         
         All articles will be marked as unread."""
@@ -265,7 +264,7 @@ class FeedManager(qtc.QObject):
                     [feed_id, article.identifier, article.uri, article.title, article.updated.timestamp(), article.author, article.content, 1])
 
 
-    def _update_feed_with_data(self, feed: feedutility.Feed, new_feed_data: feedutility.Feed, articles: List[feedutility.Article]):
+    def _update_feed_with_data(self, feed: Feed, new_feed_data: Feed, articles: List[Article]):
         """Recieves updated or new feed data."""
         # update feed
         feed.update(new_feed_data)
@@ -300,7 +299,7 @@ class FeedManager(qtc.QObject):
         Will also update the unread count on the feed."""
 
         # TODO: handle custom delete policy, only using default delete time for now
-        limit = self.settings.settings["default_delete_time"]
+        limit = self.settings["default_delete_time"]
         if limit == 0:
             date_cutoff = None
         else:
@@ -337,7 +336,7 @@ class FeedManager(qtc.QObject):
         self._connection.execute('''DELETE from articles WHERE updated < ? and feed_id = ?''', [cutoff_time.timestamp(), feed_id])
         
 
-    def _refresh_schedule_remove_item(self, feed: feedutility.Feed) -> None:
+    def _refresh_schedule_remove_item(self, feed: Feed) -> None:
         """Removes an item from the refresh schedule."""
         i = next(i for i,v in enumerate(self._refresh_schedule) if v.feed.db_id == feed.db_id)
         del self._refresh_schedule[i]

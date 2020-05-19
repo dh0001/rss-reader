@@ -39,7 +39,7 @@ class Article:
     def __init__(self):
         self.identifier: str = None
         self.title: str = None
-        self.updated: datetime.datetime
+        self.updated = None
         self.content: str = None
         self.author: str = None
         self.uri: str = None

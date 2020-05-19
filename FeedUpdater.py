@@ -1,8 +1,7 @@
 
-import feed as feedutility
+from feed import Feed, Folder, get_feed
 import time
 import threading
-import settings
 import datetime
 import queue
 import logging
@@ -12,7 +11,7 @@ from sortedcontainers import SortedKeyList
 
 
 class UpdateThread(qtc.QThread):
-    data_downloaded_event = qtc.Signal(feedutility.Feed, feedutility.Feed, list)
+    data_downloaded_event = qtc.Signal(Feed, Feed, list)
     download_error_event = qtc.Signal()
 
 
@@ -22,20 +21,20 @@ class UpdateThread(qtc.QThread):
         Holds a feed, and the time it should be refreshed.
         A value of `None` for feed indicates it the entry for global refresh."""
         __slots__ = 'scheduled', 'time'
-        def __init__(self, scheduled: Union[feedutility.Feed, None], time: int):
+        def __init__(self, scheduled: Union[Feed, None], time: int):
             self.scheduled = scheduled  # a value of None indicates global refresh
             self.time = time
 
 
-    def __init__(self, feeds: feedutility.Folder, settings: settings.Settings):
+    def __init__(self, feeds: Folder, settings):
         """
         Parameters
         ----------
 
-        feeds : feedutility.Folder
+        feeds
             a Folder containing all the feeds that will be in the scheduler.
 
-        settings : settings.Settings
+        settings
             the settings for the application.
         """
         qtc.QThread.__init__(self)
@@ -52,7 +51,7 @@ class UpdateThread(qtc.QThread):
                 self.schedule.add(UpdateThread.Entry(feed, time.time() + feed.refresh_rate))
 
         # entry for global refresh
-        self.schedule.add(UpdateThread.Entry(None, self.settings.settings["refresh_time"] + time.time()))
+        self.schedule.add(UpdateThread.Entry(None, self.settings["refresh_time"] + time.time()))
 
 
     def run(self):
@@ -64,7 +63,7 @@ class UpdateThread(qtc.QThread):
 
                 if self.schedule[0].time <= time.time():
 
-                    if type(self.schedule[0].scheduled) is feedutility.Feed:
+                    if type(self.schedule[0].scheduled) is Feed:
                         feed = self.schedule[0].scheduled
                         self.queue.put(feed)
                         self.schedule.add(UpdateThread.Entry(feed, time.time() + feed.refresh_rate))
@@ -72,7 +71,7 @@ class UpdateThread(qtc.QThread):
                     else:
                         # global refresh
                         self.global_refresh_folder(self.feeds)
-                        self.schedule.add(UpdateThread.Entry(None, self.settings.settings["refresh_time"] + time.time()))
+                        self.schedule.add(UpdateThread.Entry(None, self.settings["refresh_time"] + time.time()))
                     
                     del self.schedule[0]
 
@@ -88,28 +87,28 @@ class UpdateThread(qtc.QThread):
         
     def global_refresh_folder(self, folder):
         for node in folder:
-            if type(node) is feedutility.Folder:
+            if type(node) is Folder:
                 self.global_refresh_folder(node)
             else:
                 if node.refresh_rate == None:
                     self.queue.put(node)
 
 
-    def update_feed(self, feed: feedutility.Feed):
+    def update_feed(self, feed: Feed):
         try:
-            updated_feed, articles = feedutility.get_feed(feed.uri, feed.template)
+            updated_feed, articles = get_feed(feed.uri, feed.template)
             self.data_downloaded_event.emit(feed, updated_feed, articles)
         except Exception:
             logging.error(f"Error parsing feed {feed.uri}")
 
-        time.sleep(self.settings.settings["global_refresh_rate"])
+        time.sleep(self.settings["global_refresh_rate"])
 
 
     def force_refresh_folder(self, folder):
 
         def folder_refresh(folder):
             for node in folder:
-                if type(node) is feedutility.Folder:
+                if type(node) is Folder:
                     folder_refresh(node)
                 else:
                     self.queue.put(node)
@@ -127,11 +126,11 @@ class UpdateThread(qtc.QThread):
         with self.schedule_lock:
             i = next((i for i,v in enumerate(self.schedule) if v.scheduled == None))
             del self.schedule[i]
-            self.schedule.add(UpdateThread.Entry(None, self.settings.settings["refresh_time"] + time.time()))
+            self.schedule.add(UpdateThread.Entry(None, self.settings["refresh_time"] + time.time()))
             self.schedule_update_event.set()
 
 
-    def update_refresh_rate(self, feed: feedutility.Feed, rate: Union[int, None]):
+    def update_refresh_rate(self, feed: Feed, rate: Union[int, None]):
 
         with self.schedule_lock:
             if feed.refresh_rate != None:

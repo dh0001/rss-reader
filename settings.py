@@ -1,23 +1,30 @@
 import json
 import os.path
+import logging
 
 from shutil import copyfile
 
-class Settings():
-    
-    def __init__(self, file: str):
-        self.settings : dict
-        self._settings_file = file
+settings = {}
+_settings_file = "settings.json"
+_default_settings_file = "defaultsettings.json"
 
-        if not os.path.exists(self._settings_file):
-            copyfile("defaultsettings.json", self._settings_file)
 
-        with open(file, "rb") as f:
+def init_settings():
+
+    if not os.path.exists(_settings_file):
+        copyfile(_default_settings_file, _settings_file)
+
+    try:
+        with open(_settings_file, "rb") as f:
+            global settings
             s = f.read().decode("utf-8")
-            self.settings = json.loads(s)
+            settings.update(json.loads(s))
+    except OSError as e:
+        logging.exception("Error reading settings file!")
+        raise e
 
 
-    def cleanup(self) -> None:
-        """Outputs settings to file."""
-        with open (self._settings_file, "w") as f:
-            f.write(json.dumps(self.settings, indent=4))
+def save_settings():
+    """Outputs settings to file."""
+    with open (_settings_file, "w") as f:
+        f.write(json.dumps(settings, indent=4))

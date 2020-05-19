@@ -1,8 +1,9 @@
-import feed as feedutility
+from feed import Feed, Article
 from feed_manager import FeedManager
 import settings
 import operator
 import logging
+from settings import settings
 
 import PySide2.QtWidgets as qtw
 import PySide2.QtCore as qtc
@@ -26,7 +27,7 @@ class ArticleView(qtw.QTreeView):
         self.feed_manager = fm
 
         # the currently viewed feed
-        self.current_feed : feedutility.Feed = None
+        self.current_feed : Feed = None
 
         # model used by this treeview
         self.article_model = ArticleViewModel(self)
@@ -51,7 +52,7 @@ class ArticleView(qtw.QTreeView):
         return
 
 
-    def select_feed(self, feed: Optional[feedutility.Feed]) -> None:
+    def select_feed(self, feed: Optional[Feed]) -> None:
         """Changes which feed's articles should be shown in the view.
         
         If feed is unspecified, the view will be blank.
@@ -73,7 +74,7 @@ class ArticleView(qtw.QTreeView):
             self.article_content_event.emit(index.internalPointer().content)
 
 
-    def recieve_new_articles(self, articles: List[feedutility.Article], feed_id: int) -> None:
+    def recieve_new_articles(self, articles: List[Article], feed_id: int) -> None:
         """Recieves new article data from the feed manager and adds them to the views.
 
         Only adds articles which are the same as the currently highlighted feed
@@ -120,7 +121,7 @@ class ArticleViewModel(qtc.QAbstractItemModel):
                 
     def __init__(self, view):
         qtc.QAbstractItemModel.__init__(self)
-        self.ar : List[feedutility.Article] = []
+        self.ar : List[Article] = []
         self.view = view
 
 
@@ -172,7 +173,7 @@ class ArticleViewModel(qtc.QAbstractItemModel):
         
         elif role == qtc.Qt.FontRole:
             f = qtg.QFont()
-            f.setPointSize(10)
+            f.setPointSize(settings["font_size"])
             if self.ar[in_index.row()].unread == True:
                 f.setBold(True)
             return f
@@ -200,7 +201,7 @@ class ArticleViewModel(qtc.QAbstractItemModel):
         self.endResetModel()
 
 
-    def set_articles(self, articles: List[feedutility.Article]) -> None:
+    def set_articles(self, articles: List[Article]) -> None:
         """Resets whats in the display with new articles. 
         
         Causes unselecting.

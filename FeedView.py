@@ -1,6 +1,6 @@
-import feed as feedutility
+from feed import Feed, Folder
 import feed_manager
-import settings
+from settings import settings
 
 import PySide2.QtWidgets as qtw
 import PySide2.QtCore as qtc
@@ -17,7 +17,7 @@ class FeedView(qtw.QTreeView):
     """
 
     # event for when the selected feed changes. The integer is the db_id of the feed.
-    feed_selected_event = qtc.Signal(feedutility.Feed)
+    feed_selected_event = qtc.Signal(Feed)
 
     def __init__(self, fm : feed_manager.FeedManager):
         super().__init__()
@@ -42,7 +42,7 @@ class FeedView(qtw.QTreeView):
         index = self.currentIndex()
 
         # could have been a folder that was selected
-        if index.isValid() and type(index.internalPointer()) == feedutility.Feed:
+        if index.isValid() and type(index.internalPointer()) == Feed:
             self.feed_selected_event.emit(index.internalPointer())        
 
 
@@ -72,7 +72,7 @@ class FeedView(qtw.QTreeView):
             node = index.internalPointer()
             menu = qtw.QMenu()
 
-            if type(node) == feedutility.Feed:
+            if type(node) == Feed:
                 refresh = menu.addAction("Refresh Feed")
                 delete = menu.addAction("Delete Feed")
                 set_refresh_rate = menu.addAction("Set Refresh Rate")
@@ -205,7 +205,7 @@ class FeedView(qtw.QTreeView):
             self.feedViewModel.update_row(index)
 
 
-    def refresh_single(self, feed: feedutility.Feed) -> None:
+    def refresh_single(self, feed: Feed) -> None:
         """
         Called when a refresh button is pressed. Tells the feed manager to update the feed.
         """
@@ -221,7 +221,7 @@ class FeedViewModel(qtc.QAbstractItemModel):
                     1: "Unread"
                 }
 
-    def __init__(self, folder: feedutility.Folder):
+    def __init__(self, folder: Folder):
         qtc.QAbstractItemModel.__init__(self)
         self.tree = folder
 
@@ -230,7 +230,7 @@ class FeedViewModel(qtc.QAbstractItemModel):
     def rowCount(self, in_index: qtc.QModelIndex):
         if in_index.isValid():
             node = in_index.internalPointer()
-            if type(node) == feedutility.Folder:
+            if type(node) == Folder:
                 return len(in_index.internalPointer().children)
             return 0
         return len(self.tree.children)
@@ -274,7 +274,7 @@ class FeedViewModel(qtc.QAbstractItemModel):
 
         node = in_index.internalPointer()
 
-        if type(node) == feedutility.Feed:
+        if type(node) == Feed:
             if role == qtc.Qt.DisplayRole or role == qtc.Qt.ToolTipRole:
                 if in_index.column() == 0:
                     return node.user_title if node.user_title != None else node.title
@@ -291,13 +291,13 @@ class FeedViewModel(qtc.QAbstractItemModel):
 
         if role == qtc.Qt.FontRole:
             f = qtg.QFont()
-            f.setPointSize(10)
-            if type(node) == feedutility.Feed and node.unread_count > 0:
+            f.setPointSize(settings["font_size"])
+            if type(node) == Feed and node.unread_count > 0:
                 f.setBold(True)
             return f
         
 
-    def set_feeds(self, tree: feedutility.Folder) -> None:   
+    def set_feeds(self, tree: Folder) -> None:   
         self.beginResetModel()
         self.tree = tree
         self.endResetModel()
