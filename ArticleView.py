@@ -30,25 +30,25 @@ class ArticleView(qtw.QTreeView):
         self.current_feed : Feed = None
 
         # model used by this treeview
-        self.article_model = ArticleViewModel(self)
+        self.articleViewModel = ArticleViewModel(self)
 
-        self.setModel(self.article_model)
+        self.setModel(self.articleViewModel)
         self.header().setStretchLastSection(False)
         self.setRootIsDecorated(False)
         self.setSortingEnabled(True)
         self.selectionModel().selectionChanged.connect(self.selection_changed)
         self.setAlternatingRowColors(True)
 
-        self.feed_manager.article_updated_event.connect(self.article_model.article_data_updated)
-        self.feed_manager.new_article_event.connect(self.article_model.new_article)
+        self.feed_manager.article_updated_event.connect(self.articleViewModel.article_data_updated)
+        self.feed_manager.new_article_event.connect(self.articleViewModel.new_article)
 
 
     def refresh(self) -> None:
         """Refreshes the data in the ArticleView using feed_manager."""
         if self.current_feed == None:
-            self.article_model.set_articles([])
+            self.articleViewModel.set_articles([])
             return
-        self.article_model.set_articles(self.feed_manager.get_articles(self.current_feed.db_id))
+        self.articleViewModel.set_articles(self.feed_manager.get_articles(self.current_feed.db_id))
         return
 
 
@@ -81,6 +81,10 @@ class ArticleView(qtw.QTreeView):
         """
 
 
+    def update_all_data(self) -> None:
+        """Updates all rows."""
+        self.articleViewModel.update_all_data()
+
 
     def article_context_menu(self, position) -> None:
         """Outputs the context menu for items in the article view."""
@@ -101,13 +105,13 @@ class ArticleView(qtw.QTreeView):
     def mark_article_read(self, index) -> None:
         """Tells the feed manager to mark the indicated article as read."""
         self.feed_manager.set_article_unread_status(self.current_feed, index.internalPointer().identifier, False)
-        self.article_model.update_row_unread_status(index, False)
+        self.articleViewModel.update_row_unread_status(index, False)
 
 
     def mark_article_unread(self, index) -> None:
         """Tells the feed manager to mark the indicated article as unread."""
         self.feed_manager.set_article_unread_status(index.internalPointer().identifier, True)
-        self.article_model.update_row_unread_status(index, True)
+        self.articleViewModel.update_row_unread_status(index, True)
 
 
 
@@ -239,4 +243,6 @@ class ArticleViewModel(qtc.QAbstractItemModel):
             self.ar.insert(i, article)
             self.endInsertRows()
 
-        
+
+    def update_all_data(self):
+        self.dataChanged.emit(qtc.QModelIndex(), qtc.QModelIndex())

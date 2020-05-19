@@ -1,11 +1,13 @@
 
 *
+!*/
 !.gitignore
 !*.py
 !download.png
 !new.png
 !defaultsettings.json
 !update.sql
+!/ui/*.ui
 
 .vscode
 

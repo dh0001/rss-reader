@@ -1,8 +1,6 @@
 # RSS Reader
 
-wip
-
-Open source RSS Reader application. Written in Python 3.
+Open source feed reading application.
 
 ## Required Packages
 
@@ -13,4 +11,4 @@ Open source RSS Reader application. Written in Python 3.
 
 ## Usage
 
-Run `rss_reader.py` using python 3. Reset by deleting articles.db and settings.json.
+Run `rss_reader.py` using python 3. Reset by deleting `articles.db`, `settings.json`, and `feeds.json`.

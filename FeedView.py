@@ -31,7 +31,7 @@ class FeedView(qtw.QTreeView):
         self.setContextMenuPolicy(qtc.Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.feed_context_menu)
 
-        self.feed_manager.feeds_updated_event.connect(self.feed_data_changed)
+        self.feed_manager.feeds_updated_event.connect(self.update_all_data)
         self.restore_expand_status()
 
 
@@ -48,6 +48,7 @@ class FeedView(qtw.QTreeView):
 
     def restore_expand_status(self):
         self.expandAll()
+        # TODO: properly implement this
         # indexes = self.feed_model.match(self.feed_model.index(0, 0), qtc.Qt.DisplayRole, "*", -1, qtc.Qt.MatchWildcard|qtc.Qt.MatchRecursive)
         # for index in indexes:
         #     node = index.internalPointer()
@@ -55,10 +56,8 @@ class FeedView(qtw.QTreeView):
         #         self.feed_view.setExpanded(index, True)
 
 
-    def feed_data_changed(self) -> None:
-        """
-        Updates feed information.
-        """
+    def update_all_data(self) -> None:
+        """Updates feed information."""
         self.feedViewModel.update_all_data()
 
 
@@ -314,6 +313,7 @@ class FeedViewModel(qtc.QAbstractItemModel):
 
 
     def update_all_data(self):
+        """Updates all rows."""
         self.dataChanged.emit(qtc.QModelIndex(), qtc.QModelIndex())
 
 

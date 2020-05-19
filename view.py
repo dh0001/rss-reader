@@ -7,6 +7,7 @@ from ArticleView import ArticleView
 import PySide2.QtWidgets as qtw
 import PySide2.QtCore as qtc
 import PySide2.QtGui as qtg
+import PySide2.QtUiTools as qut
 
 from typing import List, Union
 
@@ -67,7 +68,7 @@ class View(qtw.QMainWindow):
         menu_bar.addAction("Add feed...").triggered.connect(self.feed_view.prompt_add_feed)
         menu_bar.addAction("Add folder...").triggered.connect(self.feed_view.prompt_add_folder)
         menu_bar.addAction("Update All Feeds").triggered.connect(self.refresh_all)
-        menu_bar.addAction("Set Global Update Rate").triggered.connect(self.prompt_set_refresh_rate)
+        menu_bar.addAction("Settings...").triggered.connect(self.settings_dialog)
         menu_bar.addSeparator()
         menu_bar.addAction("Exit").triggered.connect(qtc.QCoreApplication.quit)
 
@@ -75,7 +76,6 @@ class View(qtw.QMainWindow):
         self.update_icon()
         tray_menu = qtw.QMenu()
         tray_menu.addAction("Update All Feeds").triggered.connect(self.refresh_all)
-        tray_menu.addAction("Set Global Update Rate").triggered.connect(self.prompt_set_refresh_rate)
         tray_menu.addSeparator()
         tray_menu.addAction("Exit").triggered.connect(qtc.QCoreApplication.quit)
         self.tray_icon.setContextMenu(tray_menu)
@@ -142,16 +142,32 @@ class View(qtw.QMainWindow):
         self.content_view.setHtml(content)
 
 
-    def prompt_set_refresh_rate(self) -> None:
-        """
-        Opens a dialog which allows the user to set the global refresh rate.
-        """
-        dialog = VerifyDialog(lambda x: x.isdigit() and int(x) > 0, "Refresh Rate (seconds):", "Set Global Refresh Rate", str(settings["refresh_time"]))
-        if (dialog.exec_() == qtw.QDialog.Accepted):
-            response = int(dialog.get_response())
-            self.feed_manager.set_default_refresh_rate(response)
+    def settings_dialog(self) -> None:
+        """Opens a dialog that allows changing settings."""
 
+        window = qut.QUiLoader().load("ui/settings.ui")
 
+        window.globalRefresh.setValue(settings["refresh_time"])
+        window.globalRefreshDelay.setValue(settings["global_refresh_rate"])
+        window.deleteTime.setValue(settings["default_delete_time"])
+        window.fontSize.setValue(settings["font_size"])
+
+        window.show()
+        if window.exec_() == qtw.QDialog.Accepted:
+            
+            if window.globalRefresh.value() != settings["refresh_time"]:
+                self.feed_manager.set_default_refresh_rate(window.globalRefresh.value())
+
+            if window.globalRefreshDelay.value() != settings["global_refresh_rate"]:
+                settings["global_refresh_rate"] = window.globalRefreshDelay.value()
+
+            if window.deleteTime.value() != settings["default_delete_time"]:
+                settings["default_delete_time"] = window.deleteTime.value()
+
+            if window.fontSize.value() != settings["font_size"]:
+                settings["font_size"] = window.fontSize.value()
+                self.article_view.update_all_data()
+                self.feed_view.update_all_data()
 
 
 class TBrowser(qtw.QTextBrowser):
