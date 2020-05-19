@@ -8,6 +8,7 @@ from PySide2 import QtCore as qtc
 from sortedcontainers import SortedKeyList
 from FeedUpdater import UpdateThread
 import dateutil.parser
+import os
 
 
 class FeedManager(qtc.QObject):
@@ -31,11 +32,7 @@ class FeedManager(qtc.QObject):
         # create and start scheduler thread
         self._scheduler_thread = UpdateThread(self.feed_cache, self.settings)
 
-        if self.settings["first-run"] == "true":
-            self._initialize_database()
-            self.settings["first-run"] = "false"
-            with open ("feeds.json", "w") as f:
-                f.write("[]")
+        self._initialize_database()
 
         self._scheduler_thread.data_downloaded_event.connect(self._update_feed_with_data)
         self._scheduler_thread.start()
@@ -188,7 +185,7 @@ class FeedManager(qtc.QObject):
 
     def _initialize_database(self) -> None:
         """Creates all the tables used."""
-        self._connection.execute('''CREATE TABLE articles (
+        self._connection.execute('''CREATE TABLE IF NOT EXISTS articles (
             feed_id INTEGER,
             identifier TEXT,
             uri TEXT,
@@ -221,6 +218,9 @@ class FeedManager(qtc.QObject):
                 return feed
             return d
 
+        if not os.path.exists("feeds.json"):
+            with open ("feeds.json", "w") as f:
+                f.write("[]")
 
         folder = Folder()
         with open("feeds.json", "rb") as f:
@@ -236,7 +236,7 @@ class FeedManager(qtc.QObject):
 
         unsavable = ["parent_folder"]
 
-        with open ("feeds.json", "w") as f:
+        with open("feeds.json", "w") as f:
             f.write(json.dumps(self.feed_cache.children, default=lambda o: {k:v for k,v in o.__dict__.items() if k not in unsavable}, indent=4))
         
 

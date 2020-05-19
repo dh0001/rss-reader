@@ -1,10 +1,10 @@
 {
     "db_file": "articles.db",
-    "first-run": "true",
     "refresh_time": 600,
     "default_delete_time": 4320,
     "global_refresh_rate": 0.25,
     "feed_counter": 0,
+    "font_size": 10,
     "geometry": "AdnQywADAAAAAAAAAAAAHQAAB38AAAQFAAABUAAAAMoAAAW+AAADjwAAAAACAAAAB4AAAAAAAAAAHQAAB38AAAQF",
     "splitter1": "AAAA/wAAAAEAAAACAAABHwAAAXEB/////wEAAAACAA==",
     "splitter2": "AAAA/wAAAAEAAAACAAACDQAABVcB/////wEAAAABAA==",
