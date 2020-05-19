@@ -97,8 +97,9 @@ class View(qtw.QMainWindow):
 
 
     def refresh_all(self) -> None:
-        """
-        Called when the refresh all button is pressed. Tells the feed manager to update all the feeds.
+        """Tells the feed manager to update all the feeds.
+        
+        Should only be called when the refresh all button is pressed. 
         """
         self.feed_manager.refresh_all()
 
@@ -127,15 +128,17 @@ class View(qtw.QMainWindow):
 
     def tray_activated(self, reason):
         if reason == qtw.QSystemTrayIcon.Trigger or reason == qtw.QSystemTrayIcon.DoubleClick:
-            self.show()
-            self.setWindowState(self.windowState() & ~qtc.Qt.WindowMinimized)
-            self.activateWindow()
+            if self.isVisible():
+                self.hide()
+            else:
+                self.show()
+                # unminimize if minimized
+                self.setWindowState(self.windowState() & ~qtc.Qt.WindowMinimized)
+                self.activateWindow()
         
 
-    def output_content(self, content) -> None:
-        """
-        Gets highlighted article in article_display, then outputs the content into content_display.
-        """
+    def output_content(self, content: str) -> None:
+        """Outputs html content to the content view."""
         self.content_view.setHtml(content)
 
 
