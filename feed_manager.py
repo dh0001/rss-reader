@@ -298,8 +298,11 @@ class FeedManager(qtc.QObject):
         If the article already exists in the database, will update it instead of adding.
         Will also update the unread count on the feed."""
 
-        # TODO: handle custom delete policy, only using default delete time for now
-        limit = self.settings["default_delete_time"]
+        if feed.delete_time is not None:
+            limit = feed.delete_time
+        else:
+            limit = self.settings["default_delete_time"]
+            
         if limit == 0:
             date_cutoff = None
         else:
