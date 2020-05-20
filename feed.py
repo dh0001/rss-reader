@@ -22,6 +22,7 @@ class Feed:
         self.user_title: Union[str, None] = None
         self.parent_folder: Folder = None
         self.refresh_rate: Union[int, None] = None
+        self.ignore_new: bool = False
         
 
     def __iter__(self):

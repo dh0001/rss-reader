@@ -109,13 +109,21 @@ class View(qtw.QMainWindow):
 
 
     def update_icon(self):
-        if self.get_folder_unread_count(self.feed_view.feeds_cache) > 0:
-            self.tray_icon.setIcon(qtg.QIcon("new.png"))
-        else:
-            self.tray_icon.setIcon(qtg.QIcon("download.png"))
+        """Updates the tray icon for the application.
+        
+        Checks if there are any unread articles, and changes the tray icon accordingly.
+        """
+        # check if there are any unread articles
+        for node in self.feed_manager.feed_cache:
+            if type(node) is Feed and not node.ignore_new and node.unread_count > 0:
+                self.tray_icon.setIcon(qtg.QIcon("new.png"))
+                return
+
+        self.tray_icon.setIcon(qtg.QIcon("download.png"))
 
 
     def get_folder_unread_count(self, folder):
+        """Returns the total number of unread articles of all feeds in a folder."""
         count = 0
         for node in folder:
             if type(node) is Feed:
@@ -127,6 +135,9 @@ class View(qtw.QMainWindow):
 
 
     def tray_activated(self, reason):
+        """Minimizes or maximizes the application to tray depending on if window is visible.
+        
+        Should only be called by an event."""
         if reason == qtw.QSystemTrayIcon.Trigger or reason == qtw.QSystemTrayIcon.DoubleClick:
             if self.isVisible():
                 self.hide()
@@ -151,6 +162,8 @@ class View(qtw.QMainWindow):
         window.globalRefreshDelay.setValue(settings["global_refresh_rate"])
         window.deleteTime.setValue(settings["default_delete_time"])
         window.fontSize.setValue(settings["font_size"])
+
+        window.setWindowFlags(qtc.Qt.WindowCloseButtonHint | qtc.Qt.WindowTitleHint)
 
         window.show()
         if window.exec_() == qtw.QDialog.Accepted:

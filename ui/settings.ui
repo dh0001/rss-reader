@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>453</width>
+    <width>447</width>
     <height>186</height>
    </rect>
   </property>
@@ -19,15 +19,15 @@
   <property name="windowTitle">
    <string>Settings</string>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout_2">
+  <layout class="QVBoxLayout" name="_8">
    <item>
     <widget class="QGroupBox" name="groupBox">
      <property name="title">
       <string>Settings</string>
      </property>
-     <layout class="QVBoxLayout" name="verticalLayout">
+     <layout class="QVBoxLayout" name="_2">
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_4">
+       <layout class="QHBoxLayout" name="_3">
         <item>
          <widget class="QLabel" name="label_4">
           <property name="sizePolicy">
@@ -56,15 +56,18 @@
            <string> seconds</string>
           </property>
           <property name="minimum">
-           <number>10</number>
+           <number>0</number>
           </property>
           <property name="maximum">
            <number>1000</number>
           </property>
+          <property name="value">
+           <number>0</number>
+          </property>
          </widget>
         </item>
         <item>
-         <spacer name="horizontalSpacer_4">
+         <spacer name="spacer">
           <property name="orientation">
            <enum>Qt::Horizontal</enum>
           </property>
@@ -79,7 +82,7 @@
        </layout>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_2">
+       <layout class="QHBoxLayout" name="_4">
         <item>
          <widget class="QLabel" name="label_2">
           <property name="sizePolicy">
@@ -113,7 +116,7 @@
          </widget>
         </item>
         <item>
-         <spacer name="horizontalSpacer_2">
+         <spacer name="spacer_2">
           <property name="orientation">
            <enum>Qt::Horizontal</enum>
           </property>
@@ -128,7 +131,7 @@
        </layout>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_3">
+       <layout class="QHBoxLayout" name="_5">
         <item>
          <widget class="QLabel" name="label_3">
           <property name="sizePolicy">
@@ -138,7 +141,7 @@
            </sizepolicy>
           </property>
           <property name="text">
-           <string>Default time to keep feeds (0 is infinite):</string>
+           <string>Default time to keep articles (0 is infinite):</string>
           </property>
          </widget>
         </item>
@@ -156,16 +159,13 @@
           <property name="suffix">
            <string> minutes</string>
           </property>
-          <property name="minimum">
-           <number>0</number>
-          </property>
           <property name="maximum">
-           <number>1000</number>
+           <number>99999999</number>
           </property>
          </widget>
         </item>
         <item>
-         <spacer name="horizontalSpacer_3">
+         <spacer name="spacer_3">
           <property name="orientation">
            <enum>Qt::Horizontal</enum>
           </property>
@@ -180,7 +180,7 @@
        </layout>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout">
+       <layout class="QHBoxLayout" name="_6">
         <item>
          <widget class="QLabel" name="label">
           <property name="sizePolicy">
@@ -217,7 +217,7 @@
          </widget>
         </item>
         <item>
-         <spacer name="horizontalSpacer">
+         <spacer name="spacer_4">
           <property name="orientation">
            <enum>Qt::Horizontal</enum>
           </property>
@@ -241,9 +241,6 @@
        <horstretch>0</horstretch>
        <verstretch>0</verstretch>
       </sizepolicy>
-     </property>
-     <property name="orientation">
-      <enum>Qt::Horizontal</enum>
      </property>
      <property name="standardButtons">
       <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
