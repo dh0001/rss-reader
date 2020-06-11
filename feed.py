@@ -61,6 +61,7 @@ class Folder:
         self.children = []
 
     def __iter__(self):
+        """iterating over a folder returns feeds in the folder recursively."""
         for child in self.children:
             yield from child
 

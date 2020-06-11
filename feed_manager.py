@@ -165,13 +165,28 @@ class FeedManager(qtc.QObject):
     def set_feed_user_title(self, feed: Feed, user_title: Union[str, None]) -> None:
         """Sets a user specified title for a feed."""
         feed.user_title = user_title
-        self._save_feeds()
 
 
     def set_default_refresh_rate(self, rate: int) -> None:
         """Sets the default refresh rate for feeds and resets the scheduled default refresh."""
-        self.settings["refresh_time"] = rate
-        self._scheduler_thread.global_refresh_time_updated()
+        self._scheduler_thread.update_global_refresh_rate(rate)
+
+
+    def set_feed_attributes(self, feed: Feed, user_title: Union[str, None], refresh_rate: Union[int, None], delete_time: Union[int, None], ignore_new_articles: bool) -> None:
+        """Sets properties for all feeds.
+        
+        Will check if value is same as previous value, and will not update if that is the case.
+        Saves feed changes to disk."""
+        if feed.refresh_rate != refresh_rate:
+            self.set_refresh_rate(feed, refresh_rate)
+
+        if feed.user_title != user_title:
+            self.set_feed_user_title(feed, user_title)
+
+        feed.delete_time = delete_time
+        feed.ignore_new = ignore_new_articles
+        self.feeds_updated_event.emit()
+        self._save_feeds()
 
 
     def verify_feed_url(self, url: str) -> bool:

@@ -70,7 +70,7 @@ class UpdateThread(qtc.QThread):
                     
                     else:
                         # global refresh
-                        self.global_refresh_folder(self.feeds)
+                        self.queue_feeds_in_folder(self.feeds)
                         self.schedule.add(UpdateThread.Entry(None, self.settings["refresh_time"] + time.time()))
                     
                     del self.schedule[0]
@@ -85,10 +85,10 @@ class UpdateThread(qtc.QThread):
             self.schedule_update_event.clear()
 
         
-    def global_refresh_folder(self, folder):
+    def queue_feeds_in_folder(self, folder):
         for node in folder:
             if type(node) is Folder:
-                self.global_refresh_folder(node)
+                self.queue_feeds_in_folder(node)
             else:
                 if node.refresh_rate == None:
                     self.queue.put(node)
@@ -122,23 +122,36 @@ class UpdateThread(qtc.QThread):
         self.schedule_update_event.set()
 
 
-    def global_refresh_time_updated(self):
+    def update_global_refresh_rate(self, rate: int):
+        """Updates the global refresh rate to the new value.
+        
+        Updates to the value should be changed using this function to avoid threading issues.
+        """
         with self.schedule_lock:
-            i = next((i for i,v in enumerate(self.schedule) if v.scheduled == None))
-            del self.schedule[i]
-            self.schedule.add(UpdateThread.Entry(None, self.settings["refresh_time"] + time.time()))
-            self.schedule_update_event.set()
+            # delete the default refresh scheduler entry
+            if self.settings["refresh_time"] != 0:
+                i = next(i for i,v in enumerate(self.schedule) if v.scheduled is None)
+                del self.schedule[i]
+
+            self.settings["refresh_time"] = rate
+            if self.settings["refresh_time"] != 0:
+                self.schedule.add(UpdateThread.Entry(None, self.settings["refresh_time"] + time.time()))
+                
+        self.schedule_update_event.set()
 
 
     def update_refresh_rate(self, feed: Feed, rate: Union[int, None]):
+        """Updates the feed's refresh rate to the new value.
+        
+        Updates to the value should be changed using this function to avoid threading issues."""
 
         with self.schedule_lock:
-            if feed.refresh_rate != None:
-                i = next((i for i,v in enumerate(self.schedule) if v.scheduled and v.scheduled.db_id == feed.db_id))
+            if feed.refresh_rate != None and feed.refresh_rate != 0:
+                i = next(i for i,v in enumerate(self.schedule) if v.scheduled is not None and v.scheduled.db_id == feed.db_id)
                 del self.schedule[i]
 
             feed.refresh_rate = rate
-            if rate != None:
+            if feed.refresh_rate != None and feed.refresh_rate != 0:
                 self.schedule.add(UpdateThread.Entry(feed, time.time() + feed.refresh_rate))
 
         self.schedule_update_event.set()

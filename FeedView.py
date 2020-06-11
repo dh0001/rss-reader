@@ -5,6 +5,7 @@ from settings import settings
 import PySide2.QtWidgets as qtw
 import PySide2.QtCore as qtc
 import PySide2.QtGui as qtg
+from PySide2.QtUiTools import QUiLoader
 
 from typing import List, Union
 
@@ -74,17 +75,14 @@ class FeedView(qtw.QTreeView):
             if type(node) == Feed:
                 refresh = menu.addAction("Refresh Feed")
                 delete = menu.addAction("Delete Feed")
-                set_refresh_rate = menu.addAction("Set Refresh Rate")
-                set_custom_title = menu.addAction("Set Title")
+                options = menu.addAction("Feed Options...")
                 action = menu.exec_(self.viewport().mapToGlobal(position))
                 if action == delete:
                     self.prompt_delete_feed(index)
                 elif action == refresh:
                     self.refresh_single(node)
-                elif action == set_refresh_rate:
-                    self.prompt_set_feed_refresh_rate(index)
-                elif action == set_custom_title:
-                    self.prompt_set_user_custom_title(index)
+                elif action == options:
+                    self.dialog_feed_settings(index)
 
             else:
                 # it is a folder
@@ -168,9 +166,7 @@ class FeedView(qtw.QTreeView):
 
 
     def prompt_delete_folder(self, index: qtc.QModelIndex) -> None:
-        """
-        Opens a message box prompt which confirms if the user wants to delete a folder.
-        """
+        """Opens a message box prompt which confirms if the user wants to delete a folder."""
         folder = index.internalPointer()
         response = qtw.QMessageBox.question(None, "Prompt", "Are you sure you want to delete '" + folder.title + "'?", qtw.QMessageBox.Yes | qtw.QMessageBox.No)
         if response == qtw.QMessageBox.Yes:
@@ -204,9 +200,55 @@ class FeedView(qtw.QTreeView):
             self.feedViewModel.update_row(index)
 
 
+    def dialog_feed_settings(self, index) -> None:
+        """Opens a dialog that allows changing a feed's settings."""
+
+        window = QUiLoader().load("ui/feedsettings.ui")
+
+        feed = index.internalPointer()
+
+        window.customTitleCheck.setChecked(feed.user_title is not None)
+        window.customTitleCheck.toggled.connect(window.customTitle.setEnabled)
+        if feed.user_title is not None:
+            window.customTitle.setText(feed.user_title)
+            window.customTitle.setEnabled(True)
+
+        window.refreshRateCheck.setChecked(feed.refresh_rate is not None)
+        window.refreshRateCheck.toggled.connect(window.refreshRate.setEnabled)
+        if feed.refresh_rate is not None:
+            window.refreshRate.setValue(feed.refresh_rate)
+            window.refreshRate.setEnabled(True)
+
+        window.deleteTimeCheck.setChecked(feed.delete_time is not None)
+        window.deleteTimeCheck.toggled.connect(window.deleteTime.setEnabled)
+        if feed.delete_time is not None:
+            window.deleteTime.setValue(feed.delete_time)
+            window.deleteTime.setEnabled(True)
+        
+        window.notifyCheck.setChecked(feed.ignore_new)
+
+        window.setWindowFlags(qtc.Qt.WindowCloseButtonHint | qtc.Qt.WindowTitleHint)
+
+        window.show()
+        if window.exec_() == qtw.QDialog.Accepted:
+
+            def check_override_value_macro(checkbox_condition, field_value):
+                if checkbox_condition:
+                    return field_value
+                else:
+                    return None
+
+            self.feed_manager.set_feed_attributes(feed, 
+            check_override_value_macro(window.customTitleCheck.isChecked(), window.customTitle.text()),
+            check_override_value_macro(window.refreshRateCheck.isChecked(), window.refreshRate.value()),
+            check_override_value_macro(window.deleteTimeCheck.isChecked(), window.deleteTime.value()),
+            window.notifyCheck.isChecked())
+
+
     def refresh_single(self, feed: Feed) -> None:
-        """
-        Called when a refresh button is pressed. Tells the feed manager to update the feed.
+        """Tells the feed manager to update the feed.
+
+        Called when a refresh button is pressed.
         """
         self.feed_manager.refresh_feed(feed)
 
