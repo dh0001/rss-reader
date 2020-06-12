@@ -20,7 +20,6 @@ view = view.View(feed_manager)
 
 try:
     # start program
-    feed_manager.refresh_all()
     app.exec_()
 
     # cleanup

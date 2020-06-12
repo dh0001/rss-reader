@@ -36,6 +36,9 @@ class FeedManager(qtc.QObject):
         self._scheduler_thread.data_downloaded_event.connect(self._update_feed_with_data)
         self._scheduler_thread.start()
 
+        if settings["startup_update"] is True:
+            self.refresh_all()
+
 
     def cleanup(self) -> None:
         """Closes db connection and exits threads gracefully."""
@@ -137,12 +140,12 @@ class FeedManager(qtc.QObject):
 
 
     def refresh_all(self) -> None:
-        """Calls refresh_feed on every feed in the cache."""
+        """Schedules all feeds to be refreshed."""
         self._scheduler_thread.force_refresh_folder(self.feed_cache)
 
 
     def refresh_feed(self, feed: Feed) -> None:
-        """Adds a feed to the update feed queue."""
+        """Schedules a feed to be refreshed."""
         self._scheduler_thread.force_refresh_feed(feed)
 
 

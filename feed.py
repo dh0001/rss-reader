@@ -110,8 +110,13 @@ templates = {
 
 def download(uri: str) -> any:
     """Downloads text file with the application's header."""
-    headers = {'User-Agent' : 'python-rss-reader'}
-    return requests.get(uri, headers=headers)
+    headers = {'User-Agent': 'python-rss-reader'}
+    try:
+        request = requests.get(uri, headers=headers)
+        request.raise_for_status()
+    except Exception as exc:
+        raise Exception(f"Request feed error: {exc if 'request' in locals() else 'cannot connect'}")
+    return request
 
 
 def get_feed(uri, template) -> Feed:

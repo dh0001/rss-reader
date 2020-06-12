@@ -161,6 +161,7 @@ class View(qtw.QMainWindow):
         window.globalRefreshDelay.setValue(settings["global_refresh_rate"])
         window.deleteTime.setValue(settings["default_delete_time"])
         window.fontSize.setValue(settings["font_size"])
+        window.startupUpdate.setChecked(settings["startup_update"])
 
         window.setWindowFlags(qtc.Qt.WindowCloseButtonHint | qtc.Qt.WindowTitleHint)
 
@@ -181,9 +182,12 @@ class View(qtw.QMainWindow):
                 self.article_view.update_all_data()
                 self.feed_view.update_all_data()
 
+            if window.startupUpdate.value() != settings["startup_update"]:
+                settings["startup_update"] = window.startupUpdate.value()
+
 
 class TBrowser(qtw.QTextBrowser):
-    """Browser with fetching resources disabled."""
+    """HTML browser with resource fetching disabled."""
 
     def loadResource(self, _type: int, _url: str):
         return None

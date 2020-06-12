@@ -49,7 +49,7 @@ class UpdateThread(qtc.QThread):
         self.queue = queue.SimpleQueue()
 
         for feed in self.feeds:
-            if feed.refresh_rate is not None:
+            if feed.refresh_rate is not None and feed.refresh_rate != 0:
                 self.schedule.add(UpdateThread.Entry(feed, time.time() + feed.refresh_rate))
 
         # entry for global refresh
@@ -68,12 +68,16 @@ class UpdateThread(qtc.QThread):
                     if type(self.schedule[0].scheduled) is Feed:
                         feed = self.schedule[0].scheduled
                         self.queue.put(feed)
-                        self.schedule.add(UpdateThread.Entry(feed, time.time() + feed.refresh_rate))
+                        assert feed.refresh_rate != 0
+                        if feed.refresh_rate is not None and feed.refresh_rate != 0:
+                            self.schedule.add(UpdateThread.Entry(feed, time.time() + feed.refresh_rate))
 
                     else:
                         # global refresh
                         self.queue_default_refresh(self.feeds)
-                        self.schedule.add(UpdateThread.Entry(None, self.settings["refresh_time"] + time.time()))
+                        assert self.settings["refresh_time"] != 0
+                        if self.settings["refresh_time"] != 0:
+                            self.schedule.add(UpdateThread.Entry(None, self.settings["refresh_time"] + time.time()))
 
                     del self.schedule[0]
 
@@ -103,10 +107,11 @@ class UpdateThread(qtc.QThread):
         Emits data_downloaded_event when the data is retrieved, then sleeps the thread
         for the duration of the global_refresh_rate."""
         try:
+            logging.debug(f"Fetching {feed.uri}")
             updated_feed, articles = get_feed(feed.uri, feed.template)
             self.data_downloaded_event.emit(feed, updated_feed, articles)
-        except Exception:
-            logging.error(f"Error parsing feed {feed.uri}")
+        except Exception as exc:
+            logging.error(f"Error parsing feed {feed.uri}, {exc}")
 
         time.sleep(self.settings["global_refresh_rate"])
 
