@@ -10,21 +10,24 @@ _default_settings_file = "defaultsettings.json"
 
 
 def init_settings():
+    """Initializes settings for the application.
 
+    Creates a settings file if it does not exist.
+    """
     if not os.path.exists(_settings_file):
         copyfile(_default_settings_file, _settings_file)
 
     try:
-        with open(_settings_file, "rb") as f:
+        with open(_settings_file, "rb") as settings_file:
             global settings
-            s = f.read().decode("utf-8")
-            settings.update(json.loads(s))
-    except OSError as e:
+            contents = settings_file.read().decode("utf-8")
+            settings.update(json.loads(contents))
+    except OSError as error:
         logging.exception("Error reading settings file!")
-        raise e
+        raise error
 
 
 def save_settings():
     """Outputs settings to file."""
-    with open (_settings_file, "w") as f:
-        f.write(json.dumps(settings, indent=4))
+    with open(_settings_file, "w") as settings_file:
+        settings_file.write(json.dumps(settings, indent=4))

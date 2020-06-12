@@ -167,7 +167,7 @@ class ArticleViewModel(qtc.QAbstractItemModel):
         if not in_index.isValid():
             return None
 
-        if role == qtc.Qt.DisplayRole or role == qtc.Qt.ToolTipRole:
+        if role in (qtc.Qt.DisplayRole, qtc.Qt.ToolTipRole):
             if in_index.column() == 0:
                 return self.articles[in_index.row()].title
             if in_index.column() == 1:
@@ -189,17 +189,18 @@ class ArticleViewModel(qtc.QAbstractItemModel):
         if role == qtc.Qt.DisplayRole:
             if orientation == qtc.Qt.Horizontal:
                 return self.definedrows.get(section, None)
+        return None
 
 
-    def sort(self, column, order=qtc.Qt.AscendingOrder):
+    def sort(self, column, ascending=qtc.Qt.AscendingOrder):
         self.beginResetModel()
-        order = True if order == qtc.Qt.AscendingOrder else False
+        ascending = ascending is qtc.Qt.AscendingOrder
         if column == 0:
-            self.articles.sort(key=lambda e: e.title, reverse=order)
+            self.articles.sort(key=lambda e: e.title, reverse=ascending)
         elif column == 1:
-            self.articles.sort(key=lambda e: e.author, reverse=order)
+            self.articles.sort(key=lambda e: e.author, reverse=ascending)
         elif column == 2:
-            self.articles.sort(key=lambda e: e.updated, reverse=order)
+            self.articles.sort(key=lambda e: e.updated, reverse=ascending)
         self.endResetModel()
 
 
@@ -240,7 +241,7 @@ class ArticleViewModel(qtc.QAbstractItemModel):
             section = ["title", "author", "updated"][self.view.header().sortIndicatorSection()]
 
             i = next((i for (i, v) in enumerate(self.articles) if operation(getattr(article, section), getattr(v, section))), len(self.articles))
-            self.beginInsertRows(qtc.QModelIndex(), i, i+1)
+            self.beginInsertRows(qtc.QModelIndex(), i, i + 1)
             self.articles.insert(i, article)
             self.endInsertRows()
 

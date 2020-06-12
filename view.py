@@ -137,7 +137,7 @@ class View(qtw.QMainWindow):
         """Minimizes or maximizes the application to tray depending on if window is visible.
 
         Should only be called by an event."""
-        if reason == qtw.QSystemTrayIcon.Trigger or reason == qtw.QSystemTrayIcon.DoubleClick:
+        if reason in (qtw.QSystemTrayIcon.Trigger, qtw.QSystemTrayIcon.DoubleClick):
             if self.isVisible():
                 self.hide()
             else:

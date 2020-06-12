@@ -7,6 +7,7 @@ from feed import Feed, Folder
 import feed_manager
 from settings import settings
 
+
 class FeedView(qtw.QTreeView):
     """
     A view for displaying feeds. feed_selected_event fires when a feed is selected.
@@ -233,8 +234,7 @@ class FeedView(qtw.QTreeView):
             def check_override_value_macro(checkbox_condition, field_value):
                 if checkbox_condition:
                     return field_value
-                else:
-                    return None
+                return None
 
             self.feed_manager.set_feed_attributes(
                 feed,
@@ -260,7 +260,7 @@ class FeedViewModel(qtc.QAbstractItemModel):
     definedrows = {
         0: "Feed Name",
         1: "Unread"
-        }
+    }
 
     def __init__(self, folder: Folder):
         qtc.QAbstractItemModel.__init__(self)
@@ -316,7 +316,7 @@ class FeedViewModel(qtc.QAbstractItemModel):
         node = in_index.internalPointer()
 
         if type(node) is Feed:
-            if role == qtc.Qt.DisplayRole or role == qtc.Qt.ToolTipRole:
+            if role in (qtc.Qt.DisplayRole, qtc.Qt.ToolTipRole):
                 if in_index.column() == 0:
                     return node.user_title if node.user_title is not None else node.title
                 if in_index.column() == 1:
@@ -337,6 +337,8 @@ class FeedViewModel(qtc.QAbstractItemModel):
                 font.setBold(True)
             return font
 
+        return None
+
 
     def set_feeds(self, tree: Folder) -> None:
         """Replaces the data in the model with new data."""
@@ -347,7 +349,7 @@ class FeedViewModel(qtc.QAbstractItemModel):
 
     def headerData(self, section, orientation, role=qtc.Qt.DisplayRole):
         if role == qtc.Qt.DisplayRole:
-            if orientation == qtc.Qt.Horizontal: # Horizontal
+            if orientation == qtc.Qt.Horizontal:  # Horizontal
                 return self.definedrows.get(section, None)
         return None
 

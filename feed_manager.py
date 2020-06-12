@@ -161,7 +161,8 @@ class FeedManager(qtc.QObject):
         self._scheduler_thread.update_refresh_rate(feed, rate)
 
 
-    def set_feed_user_title(self, feed: Feed, user_title: Union[str, None]) -> None:
+    @staticmethod
+    def set_feed_user_title(feed: Feed, user_title: Union[str, None]) -> None:
         """Sets a user specified title for a feed."""
         feed.user_title = user_title
 
@@ -188,7 +189,8 @@ class FeedManager(qtc.QObject):
         self._save_feeds()
 
 
-    def verify_feed_url(self, url: str) -> bool:
+    @staticmethod
+    def verify_feed_url(url: str) -> bool:
         """Verifies if a url points to a proper feed."""
         try:
             get_feed(url, "rss")
@@ -210,7 +212,8 @@ class FeedManager(qtc.QObject):
             unread BOOLEAN)''')
 
 
-    def _load_feeds(self):
+    @staticmethod
+    def _load_feeds():
         """Load feeds from disk."""
 
         def set_parents(tree):
@@ -252,7 +255,7 @@ class FeedManager(qtc.QObject):
         unsavable = ["parent_folder"]
 
         with open("feeds.json", "w") as feeds_file:
-            feeds_file.write(json.dumps(self.feed_cache.children, default=lambda o: {k:v for (k, v) in o.__dict__.items() if k not in unsavable}, indent=4))
+            feeds_file.write(json.dumps(self.feed_cache.children, default=lambda o: {k: v for (k, v) in o.__dict__.items() if k not in unsavable}, indent=4))
 
 
 

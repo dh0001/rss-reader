@@ -32,6 +32,7 @@ class UpdateThread(qtc.QThread):
         Holds a feed, and the time it should be refreshed.
         A value of `None` for feed indicates it the entry for global refresh."""
         __slots__ = 'scheduled', 'time'
+
         def __init__(self, scheduled: Union[Feed, None], t: int):
             self.scheduled = scheduled  # a value of None indicates global refresh
             self.time = t
