@@ -1,10 +1,7 @@
 from typing import List, Union, Tuple
-import collections
-from itertools import chain
 import requests
 import defusedxml.ElementTree as defusxml
 import dateutil.parser
-import datetime
 
 
 class Feed:
@@ -24,13 +21,14 @@ class Feed:
         self.refresh_rate: Union[int, None] = None
         self.ignore_new: bool = False
         self.delete_time: Union[int, None] = None
-        
+
 
     def __iter__(self):
         yield self
 
 
     def update(self, feed: 'Feed'):
+        """Updates the feed with new values, except values used by the feed manager."""
         self.title = feed.title
         self.meta.update(feed.meta)
 
@@ -94,7 +92,7 @@ def atom_rss_template(uri: str) -> Tuple[Feed, List[Article]]:
             article.author = author.find("{http://www.w3.org/2005/Atom}name").text
         else:
             author = top_author
-        
+
         article.identifier = xml_article.find("{http://www.w3.org/2005/Atom}id").text
         article.title = xml_article.find("{http://www.w3.org/2005/Atom}title").text
         article.updated = dateutil.parser.isoparse(xml_article.find("{http://www.w3.org/2005/Atom}updated").text)
@@ -114,12 +112,12 @@ def download(uri: str) -> any:
     """Downloads text file with the application's header."""
     headers = {'User-Agent' : 'python-rss-reader'}
     return requests.get(uri, headers=headers)
-    
 
-def get_feed(uri, template):
-    """"""
+
+def get_feed(uri, template) -> Feed:
+    """Retrives and processes data for a feed from the internet."""
     return templates[template](uri)
 
 
 if __name__ == "__main__":
-    a = get_feed("https://www.reddit.com/.rss", "rss")
+    test = get_feed("https://www.reddit.com/.rss", "rss")

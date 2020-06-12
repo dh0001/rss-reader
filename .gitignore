@@ -8,6 +8,7 @@
 !defaultsettings.json
 !update.sql
 !/ui/*.ui
+!.pylintrc
 
 .vscode
 

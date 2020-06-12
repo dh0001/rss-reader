@@ -1,15 +1,13 @@
-from feed import Feed
-import feed_manager
-from settings import settings
-from FeedView import FeedView, VerifyDialog
-from ArticleView import ArticleView
-
 import PySide2.QtWidgets as qtw
 import PySide2.QtCore as qtc
 import PySide2.QtGui as qtg
 import PySide2.QtUiTools as qut
 
-from typing import List, Union
+from feed import Feed
+import feed_manager
+from settings import settings
+from feed_view import FeedView
+from article_view import ArticleView
 
 
 class View(qtw.QMainWindow):
@@ -41,14 +39,14 @@ class View(qtw.QMainWindow):
 
 
     def gui(self) -> None:
-        """Starts the GUI. 
-        
+        """Starts the GUI.
+
         Initializes the window, views, and sets up interactions.
         """
         self.setWindowTitle('RSS Reader')
         # self.main_window.resize(800, 600)
 
-        main_widget = qtw.QWidget()   
+        main_widget = qtw.QWidget()
         self.setCentralWidget(main_widget)
 
         self.content_view.setOpenExternalLinks(True)
@@ -80,13 +78,13 @@ class View(qtw.QMainWindow):
         tray_menu.addAction("Exit").triggered.connect(qtc.QCoreApplication.quit)
         self.tray_icon.setContextMenu(tray_menu)
         self.tray_icon.show()
-        
+
         self.restoreGeometry(qtc.QByteArray.fromBase64(bytes(settings["geometry"], "utf-8")))
         self.splitter1.restoreState(qtc.QByteArray.fromBase64(bytes(settings["splitter1"], "utf-8")))
         self.splitter2.restoreState(qtc.QByteArray.fromBase64(bytes(settings["splitter2"], "utf-8")))
         self.feed_view.header().restoreState(qtc.QByteArray.fromBase64(bytes(settings["feed_view_headers"], "utf-8")))
         self.article_view.header().restoreState(qtc.QByteArray.fromBase64(bytes(settings["article_view_headers"], "utf-8")))
-        
+
         self.feed_view.header().setSectionResizeMode(qtw.QHeaderView.Interactive)
         self.feed_view.feed_selected_event.connect(self.article_view.select_feed)
         self.article_view.article_content_event.connect(self.output_content)
@@ -98,19 +96,20 @@ class View(qtw.QMainWindow):
 
     def refresh_all(self) -> None:
         """Tells the feed manager to update all the feeds.
-        
-        Should only be called when the refresh all button is pressed. 
+
+        Should only be called when the refresh all button is pressed.
         """
         self.feed_manager.refresh_all()
 
-    
-    def hideEvent(self, event):
+
+
+    def hideEvent(self, _event):
         self.hide()
 
 
     def update_icon(self):
         """Updates the tray icon for the application.
-        
+
         Checks if there are any unread articles, and changes the tray icon accordingly.
         """
         # check if there are any unread articles
@@ -136,7 +135,7 @@ class View(qtw.QMainWindow):
 
     def tray_activated(self, reason):
         """Minimizes or maximizes the application to tray depending on if window is visible.
-        
+
         Should only be called by an event."""
         if reason == qtw.QSystemTrayIcon.Trigger or reason == qtw.QSystemTrayIcon.DoubleClick:
             if self.isVisible():
@@ -146,7 +145,7 @@ class View(qtw.QMainWindow):
                 # unminimize if minimized
                 self.setWindowState(self.windowState() & ~qtc.Qt.WindowMinimized)
                 self.activateWindow()
-        
+
 
     def output_content(self, content: str) -> None:
         """Outputs html content to the content view."""
@@ -167,7 +166,7 @@ class View(qtw.QMainWindow):
 
         window.show()
         if window.exec_() == qtw.QDialog.Accepted:
-            
+
             if window.globalRefresh.value() != settings["refresh_time"]:
                 self.feed_manager.set_default_refresh_rate(window.globalRefresh.value())
 
@@ -184,7 +183,9 @@ class View(qtw.QMainWindow):
 
 
 class TBrowser(qtw.QTextBrowser):
-    def loadResource(self, type: int, url: str):
+    """Browser with fetching resources disabled."""
+
+    def loadResource(self, _type: int, _url: str):
         return None
 
     def __init__(self):

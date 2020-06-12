@@ -1,14 +1,13 @@
 import sqlite3
-from feed import Feed, Article, Folder, get_feed
-import sched
 import json
 import datetime
 from typing import List, Union
-from PySide2 import QtCore as qtc
-from sortedcontainers import SortedKeyList
-from FeedUpdater import UpdateThread
-import dateutil.parser
 import os
+
+from PySide2 import QtCore as qtc
+
+from feed import Feed, Article, Folder, get_feed
+from feed_updater import UpdateThread
 
 
 class FeedManager(qtc.QObject):
@@ -84,7 +83,7 @@ class FeedManager(qtc.QObject):
         # feed_counter should always be free
         feed.db_id = self.settings["feed_counter"]
         self.settings["feed_counter"] += 1
-        
+
         folder.children.append(feed)
 
         self._process_new_articles(feed, articles)
@@ -97,7 +96,7 @@ class FeedManager(qtc.QObject):
 
         Removes a feed with passed feed_id, and its entry from the refresh schedule.
         """
-        if feed.refresh_rate != None:
+        if feed.refresh_rate is not None:
             self._refresh_schedule_remove_item(feed)
 
         assert feed.parent_folder.children.index(feed) != -1, "Folder was not found when trying to delete it!"
@@ -120,17 +119,17 @@ class FeedManager(qtc.QObject):
         def _delete_feeds_in_folder(folder: Folder) -> None:
             """Deletes all feeds in a folder recursively."""
             for child in folder.children:
-                if type(child) == Feed:
+                if type(child) is Feed:
                     self.delete_feed(child)
                 else:
                     _delete_feeds_in_folder(child)
-        
+
         _delete_feeds_in_folder(folder)
         assert folder.parent_folder.children.index(folder) != -1, "Folder was not found when trying to delete it!"
         del folder.parent_folder.children[folder.parent_folder.children.index(folder)]
         self._save_feeds()
 
-    
+
     def rename_folder(self, name: str, folder: Folder) -> None:
         """Changes the name of a folder."""
         folder.title = name
@@ -157,7 +156,7 @@ class FeedManager(qtc.QObject):
 
     def set_refresh_rate(self, feed: Feed, rate: Union[int, None]) -> None:
         """Sets the refresh rate for an individual feed.
-        
+
         and sets/resets the scheduled refresh for that feed."""
         self._scheduler_thread.update_refresh_rate(feed, rate)
 
@@ -174,7 +173,7 @@ class FeedManager(qtc.QObject):
 
     def set_feed_attributes(self, feed: Feed, user_title: Union[str, None], refresh_rate: Union[int, None], delete_time: Union[int, None], ignore_new_articles: bool) -> None:
         """Sets properties for all feeds.
-        
+
         Will check if value is same as previous value, and will not update if that is the case.
         Saves feed changes to disk."""
         if feed.refresh_rate != refresh_rate:
@@ -218,29 +217,30 @@ class FeedManager(qtc.QObject):
             """recursively set parents"""
             for child in tree.children:
                 child.parent_folder = tree
-                if type(child) == Folder:
+                if type(child) is Folder:
                     set_parents(child)
 
 
-        def _dict_to_feed_or_folder(d):
-            if "children" in d:
-                node = Folder()
-                node.__dict__ = d
-                return node
-            elif "title" in d:
+        def _dict_to_feed_or_folder(node):
+            if "children" in node:
+                folder = Folder()
+                folder.__dict__ = node
+                return folder
+
+            if "title" in node:
                 feed = Feed()
-                feed.__dict__ = d
+                feed.__dict__ = node
                 return feed
-            return d
+            return node
 
         if not os.path.exists("feeds.json"):
-            with open ("feeds.json", "w") as f:
-                f.write("[]")
+            with open("feeds.json", "w") as new_file:
+                new_file.write("[]")
 
         folder = Folder()
-        with open("feeds.json", "rb") as f:
-            s = f.read().decode("utf-8")
-            folder.children = json.loads(s, object_hook=_dict_to_feed_or_folder)
+        with open("feeds.json", "rb") as feeds_file:
+            contents = feeds_file.read().decode("utf-8")
+            folder.children = json.loads(contents, object_hook=_dict_to_feed_or_folder)
 
         set_parents(folder)
         return folder
@@ -251,15 +251,15 @@ class FeedManager(qtc.QObject):
 
         unsavable = ["parent_folder"]
 
-        with open("feeds.json", "w") as f:
-            f.write(json.dumps(self.feed_cache.children, default=lambda o: {k:v for k,v in o.__dict__.items() if k not in unsavable}, indent=4))
-        
+        with open("feeds.json", "w") as feeds_file:
+            feeds_file.write(json.dumps(self.feed_cache.children, default=lambda o: {k:v for (k, v) in o.__dict__.items() if k not in unsavable}, indent=4))
+
 
 
     def _get_unread_articles_count(self, feed: Feed) -> int:
         """Return the number of unread articles for a feed."""
         return self._connection.execute('''SELECT count(*) FROM articles WHERE unread = 1 AND feed_id = ?''', [feed.db_id]).fetchone()[0]
-    
+
 
     def _get_article_identifiers(self, feed_id: int) -> set:
         """Returns a set containing all the identifiers of all articles for a feed."""
@@ -271,11 +271,12 @@ class FeedManager(qtc.QObject):
 
     def _add_articles_to_database(self, articles: List[Article], feed_id: int) -> None:
         """Add a list of articles to the database.
-        
+
         All articles will be marked as unread."""
         with self._connection:
             for article in articles:
-                self._connection.execute('''INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                self._connection.execute(
+                    '''INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
                     [feed_id, article.identifier, article.uri, article.title, article.updated.timestamp(), article.author, article.content, 1])
 
 
@@ -283,7 +284,7 @@ class FeedManager(qtc.QObject):
         """Recieves updated or new feed data."""
         # update feed
         feed.update(new_feed_data)
-        
+
         # update articles
         self._process_new_articles(feed, articles)
         self.feeds_updated_event.emit()
@@ -293,22 +294,23 @@ class FeedManager(qtc.QObject):
         """Updates an existing article in the database."""
         with self._connection:
             for article in articles:
-                self._connection.execute('''
-                UPDATE articles 
-                SET uri = ?,
+                self._connection.execute(
+                    '''
+                    UPDATE articles
+                    SET uri = ?,
                     title = ?,
                     updated = ?,
                     author = ?,
                     content = ?,
                     unread = ?
-                WHERE identifier = ?''', 
-                [article.uri, article.title, article.updated.timestamp(), article.author, article.content, article.unread, 
-                article.identifier])
+                    WHERE identifier = ?''',
+                    [article.uri, article.title, article.updated.timestamp(), article.author, article.content, article.unread,
+                     article.identifier])
 
 
     def _process_new_articles(self, feed, articles):
         """Processes newly created articles for the feed, and adds them to the database.
-        
+
         Checks for and delete old articles in the list, and delete old aricles in the database.
         If the article already exists in the database, will update it instead of adding.
         Will also update the unread count on the feed."""
@@ -317,14 +319,14 @@ class FeedManager(qtc.QObject):
             limit = feed.delete_time
         else:
             limit = self.settings["default_delete_time"]
-            
+
         if limit == 0:
             date_cutoff = None
         else:
             date_cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=limit)
             self._delete_old_articles(date_cutoff, feed.db_id)
-        
-        knownIds = self._get_article_identifiers(feed.db_id)
+
+        known_ids = self._get_article_identifiers(feed.db_id)
 
         new_articles = []
         updated_articles = []
@@ -333,8 +335,8 @@ class FeedManager(qtc.QObject):
             if date_cutoff is not None and article.updated < date_cutoff:
                 continue
 
-            if article.identifier in knownIds:
-                if knownIds[article.identifier] > article.updated:
+            if article.identifier in known_ids:
+                if known_ids[article.identifier] > article.updated:
                     self._update_article(article)
                     updated_articles.append(article)
 
@@ -352,12 +354,10 @@ class FeedManager(qtc.QObject):
     def _delete_old_articles(self, cutoff_time: datetime.datetime, feed_id: int) -> None:
         """Deletes articles in the database which are not after the passed time_limit."""
         self._connection.execute('''DELETE from articles WHERE updated < ? and feed_id = ?''', [cutoff_time.timestamp(), feed_id])
-        
+
 
     def _refresh_schedule_remove_item(self, feed: Feed) -> None:
         """Removes an item from the refresh schedule."""
-        i = next(i for i,v in enumerate(self._refresh_schedule) if v.feed.db_id == feed.db_id)
+        i = next(i for (i, v) in enumerate(self._refresh_schedule) if v.feed.db_id == feed.db_id)
         del self._refresh_schedule[i]
         self._scheduler_thread.schedule_update_event.set()
-
-

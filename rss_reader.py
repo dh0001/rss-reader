@@ -1,9 +1,7 @@
 # packages
-import sqlite3
-import requests
-import PySide2.QtWidgets as qtw
 import logging
 
+import PySide2.QtWidgets as qtw
 
 # own modules
 import feed_manager
@@ -29,7 +27,7 @@ try:
     feed_manager.cleanup()
     view.cleanup()
     settings.save_settings()
-except:
+except BaseException:
     logging.exception("Exception thrown!")
 
 app.quit()

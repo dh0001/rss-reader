@@ -1,14 +1,11 @@
-from feed import Feed, Folder
-import feed_manager
-from settings import settings
-
 import PySide2.QtWidgets as qtw
 import PySide2.QtCore as qtc
 import PySide2.QtGui as qtg
 from PySide2.QtUiTools import QUiLoader
 
-from typing import List, Union
-
+from feed import Feed, Folder
+import feed_manager
+from settings import settings
 
 class FeedView(qtw.QTreeView):
     """
@@ -20,13 +17,13 @@ class FeedView(qtw.QTreeView):
     # event for when the selected feed changes. The integer is the db_id of the feed.
     feed_selected_event = qtc.Signal(Feed)
 
-    def __init__(self, fm : feed_manager.FeedManager):
+    def __init__(self, fm: feed_manager.FeedManager):
         super().__init__()
 
         self.feed_manager = fm
         self.feeds_cache = self.feed_manager.feed_cache
-        self.feedViewModel = FeedViewModel(self.feeds_cache)
-        self.setModel(self.feedViewModel)
+        self.feed_view_model = FeedViewModel(self.feeds_cache)
+        self.setModel(self.feed_view_model)
         self.selectionModel().selectionChanged.connect(self.fire_selected_event)
         # self.setRootIsDecorated(False)
         self.setContextMenuPolicy(qtc.Qt.CustomContextMenu)
@@ -44,10 +41,11 @@ class FeedView(qtw.QTreeView):
 
         # could have been a folder that was selected
         if index.isValid() and type(index.internalPointer()) == Feed:
-            self.feed_selected_event.emit(index.internalPointer())        
+            self.feed_selected_event.emit(index.internalPointer())
 
 
     def restore_expand_status(self):
+        """Restores the expand/collapse state of folders from previous launch."""
         self.expandAll()
         # TODO: properly implement this
         # indexes = self.feed_model.match(self.feed_model.index(0, 0), qtc.Qt.DisplayRole, "*", -1, qtc.Qt.MatchWildcard|qtc.Qt.MatchRecursive)
@@ -59,7 +57,7 @@ class FeedView(qtw.QTreeView):
 
     def update_all_data(self) -> None:
         """Updates feed information."""
-        self.feedViewModel.update_all_data()
+        self.feed_view_model.update_all_data()
 
 
     def feed_context_menu(self, position) -> None:
@@ -67,12 +65,12 @@ class FeedView(qtw.QTreeView):
         Outputs the context menu for items in the feed view.
         """
         index = self.indexAt(position)
-        
+
         if index.isValid():
             node = index.internalPointer()
             menu = qtw.QMenu()
 
-            if type(node) == Feed:
+            if type(node) is Feed:
                 refresh = menu.addAction("Refresh Feed")
                 delete = menu.addAction("Delete Feed")
                 options = menu.addAction("Feed Options...")
@@ -102,20 +100,20 @@ class FeedView(qtw.QTreeView):
 
 
 
-    def prompt_add_feed(self, index: qtc.QModelIndex=None) -> None:
+    def prompt_add_feed(self, index: qtc.QModelIndex = None) -> None:
         """
         Opens a dialog allowing a user to enter a url for a new feed.
         """
         dialog = VerifyDialog(self.feed_manager.verify_feed_url, "Add Feed:", "Add Feed", "")
-        if (dialog.exec_() == qtw.QDialog.Accepted):
+        if dialog.exec_() == qtw.QDialog.Accepted:
             if index:
                 folder = index.internalPointer()
             else:
                 folder = self.feeds_cache
                 index = qtc.QModelIndex()
-            self.feedViewModel.beginInsertRows(index, len(folder.children), len(folder.children))
+            self.feed_view_model.beginInsertRows(index, len(folder.children), len(folder.children))
             self.feed_manager.add_feed(dialog.get_response(), folder)
-            self.feedViewModel.endInsertRows()
+            self.feed_view_model.endInsertRows()
 
             self.setExpanded(index, True)
 
@@ -126,28 +124,28 @@ class FeedView(qtw.QTreeView):
         Deletes a feed from the view, then tells the feed manager to remove it from the database.
         """
         feed = index.internalPointer()
-        response = qtw.QMessageBox.question(None, "Prompt", "Are you sure you want to delete '" + (feed.user_title if feed.user_title != None else feed.title) + "'?", qtw.QMessageBox.Yes | qtw.QMessageBox.No)
+        response = qtw.QMessageBox.question(None, "Prompt", "Are you sure you want to delete '" + (feed.user_title if feed.user_title is not None else feed.title) + "'?", qtw.QMessageBox.Yes | qtw.QMessageBox.No)
         if response == qtw.QMessageBox.Yes:
-            self.feedViewModel.beginRemoveRows(index.parent(), feed.row, feed.row)
+            self.feed_view_model.beginRemoveRows(index.parent(), feed.row, feed.row)
             self.feed_manager.delete_feed(feed)
-            self.feedViewModel.endRemoveRows()
+            self.feed_view_model.endRemoveRows()
 
 
-    def prompt_add_folder(self, index: qtc.QModelIndex=None) -> None:
+    def prompt_add_folder(self, index: qtc.QModelIndex = None) -> None:
         """
         Opens a dialog allowing a user to enter a name for a new folder.
         Adds a folder to the feed database, with the passed index as a parent.
         """
         dialog = VerifyDialog(lambda x: True, "Add Folder:", "Add Folder", "")
-        if (dialog.exec_() == qtw.QDialog.Accepted):
+        if dialog.exec_() == qtw.QDialog.Accepted:
             if index:
                 folder = index.internalPointer()
             else:
                 folder = self.feeds_cache
                 index = qtc.QModelIndex()
-            self.feedViewModel.beginInsertRows(index, len(folder.children), len(folder.children))
+            self.feed_view_model.beginInsertRows(index, len(folder.children), len(folder.children))
             self.feed_manager.add_folder(dialog.get_response(), folder)
-            self.feedViewModel.endInsertRows()
+            self.feed_view_model.endInsertRows()
 
 
     def prompt_rename_folder(self, index: qtc.QModelIndex) -> None:
@@ -155,14 +153,14 @@ class FeedView(qtw.QTreeView):
         Opens a dialog allowing a user to rename a folder.
         """
         dialog = VerifyDialog(lambda x: True, "Rename Folder:", "Rename Folder", "")
-        if (dialog.exec_() == qtw.QDialog.Accepted):
+        if dialog.exec_() == qtw.QDialog.Accepted:
             if index:
                 folder = index.internalPointer()
             else:
                 folder = self.feeds_cache
                 index = qtc.QModelIndex()
             self.feed_manager.rename_folder(dialog.get_response(), folder)
-            self.feedViewModel.update_row(index)
+            self.feed_view_model.update_row(index)
 
 
     def prompt_delete_folder(self, index: qtc.QModelIndex) -> None:
@@ -171,9 +169,9 @@ class FeedView(qtw.QTreeView):
         response = qtw.QMessageBox.question(None, "Prompt", "Are you sure you want to delete '" + folder.title + "'?", qtw.QMessageBox.Yes | qtw.QMessageBox.No)
         if response == qtw.QMessageBox.Yes:
 
-            self.feedViewModel.beginRemoveRows(index.parent(), folder.row, folder.row)
+            self.feed_view_model.beginRemoveRows(index.parent(), folder.row, folder.row)
             self.feed_manager.delete_folder(folder)
-            self.feedViewModel.endRemoveRows()
+            self.feed_view_model.endRemoveRows()
 
 
     def prompt_set_user_custom_title(self, index: qtc.QModelIndex) -> None:
@@ -181,23 +179,23 @@ class FeedView(qtw.QTreeView):
         Opens a dialog which allows the user to enter a custom title for a feed.
         """
         feed = index.internalPointer()
-        dialog = VerifyDialog(lambda x: True, "Title:", "Set Title", feed.user_title if feed.user_title != None else feed.title)
-        if (dialog.exec_() == qtw.QDialog.Accepted):
+        dialog = VerifyDialog(lambda x: True, "Title:", "Set Title", feed.user_title if feed.user_title is not None else feed.title)
+        if dialog.exec_() == qtw.QDialog.Accepted:
             response = dialog.get_response() if dialog.get_response() != "" else None
             self.feed_manager.set_feed_user_title(feed, response)
-            self.feedViewModel.update_row(index)
+            self.feed_view_model.update_row(index)
 
-        
+
     def prompt_set_feed_refresh_rate(self, index: qtc.QModelIndex) -> None:
         """
         Opens a dialog which allows the user to set a feed's refresh rate.
         """
         feed = index.internalPointer()
         dialog = VerifyDialog(lambda x: x.isdigit() or x == "", "Refresh Rate (seconds):", "Set Refresh Rate", str(feed.refresh_rate))
-        if (dialog.exec_() == qtw.QDialog.Accepted):
+        if dialog.exec_() == qtw.QDialog.Accepted:
             response = int(dialog.get_response()) if dialog.get_response() != "" else None
             self.feed_manager.set_refresh_rate(feed, response)
-            self.feedViewModel.update_row(index)
+            self.feed_view_model.update_row(index)
 
 
     def dialog_feed_settings(self, index) -> None:
@@ -224,7 +222,7 @@ class FeedView(qtw.QTreeView):
         if feed.delete_time is not None:
             window.deleteTime.setValue(feed.delete_time)
             window.deleteTime.setEnabled(True)
-        
+
         window.notifyCheck.setChecked(feed.ignore_new)
 
         window.setWindowFlags(qtc.Qt.WindowCloseButtonHint | qtc.Qt.WindowTitleHint)
@@ -238,11 +236,12 @@ class FeedView(qtw.QTreeView):
                 else:
                     return None
 
-            self.feed_manager.set_feed_attributes(feed, 
-            check_override_value_macro(window.customTitleCheck.isChecked(), window.customTitle.text()),
-            check_override_value_macro(window.refreshRateCheck.isChecked(), window.refreshRate.value()),
-            check_override_value_macro(window.deleteTimeCheck.isChecked(), window.deleteTime.value()),
-            window.notifyCheck.isChecked())
+            self.feed_manager.set_feed_attributes(
+                feed,
+                check_override_value_macro(window.customTitleCheck.isChecked(), window.customTitle.text()),
+                check_override_value_macro(window.refreshRateCheck.isChecked(), window.refreshRate.value()),
+                check_override_value_macro(window.deleteTimeCheck.isChecked(), window.deleteTime.value()),
+                window.notifyCheck.isChecked())
 
 
     def refresh_single(self, feed: Feed) -> None:
@@ -256,11 +255,12 @@ class FeedView(qtw.QTreeView):
 
 
 class FeedViewModel(qtc.QAbstractItemModel):
+    """Item model which describes folders which contain feeds or other folders."""
 
     definedrows = {
-                    0: "Feed Name",
-                    1: "Unread"
-                }
+        0: "Feed Name",
+        1: "Unread"
+        }
 
     def __init__(self, folder: Folder):
         qtc.QAbstractItemModel.__init__(self)
@@ -271,7 +271,7 @@ class FeedViewModel(qtc.QAbstractItemModel):
     def rowCount(self, in_index: qtc.QModelIndex):
         if in_index.isValid():
             node = in_index.internalPointer()
-            if type(node) == Folder:
+            if type(node) is Folder:
                 return len(in_index.internalPointer().children)
             return 0
         return len(self.tree.children)
@@ -285,7 +285,7 @@ class FeedViewModel(qtc.QAbstractItemModel):
             parent = parent_index.internalPointer()
         else:
             parent = self.tree
-            
+
         if self.hasIndex(row, column, parent_index):
             return self.createIndex(row, column, parent.children[row])
         return qtc.QModelIndex()
@@ -302,7 +302,7 @@ class FeedViewModel(qtc.QAbstractItemModel):
         return qtc.QModelIndex()
 
 
-    def columnCount(self, in_index):
+    def columnCount(self, _in_index):
         """
         There are only two columns in FeedView, the feed name, and its unread count.
         """
@@ -315,10 +315,10 @@ class FeedViewModel(qtc.QAbstractItemModel):
 
         node = in_index.internalPointer()
 
-        if type(node) == Feed:
+        if type(node) is Feed:
             if role == qtc.Qt.DisplayRole or role == qtc.Qt.ToolTipRole:
                 if in_index.column() == 0:
-                    return node.user_title if node.user_title != None else node.title
+                    return node.user_title if node.user_title is not None else node.title
                 if in_index.column() == 1:
                     return node.unread_count
 
@@ -331,14 +331,15 @@ class FeedViewModel(qtc.QAbstractItemModel):
                     return None
 
         if role == qtc.Qt.FontRole:
-            f = qtg.QFont()
-            f.setPointSize(settings["font_size"])
-            if type(node) == Feed and node.unread_count > 0:
-                f.setBold(True)
-            return f
-        
+            font = qtg.QFont()
+            font.setPointSize(settings["font_size"])
+            if type(node) is Feed and node.unread_count > 0:
+                font.setBold(True)
+            return font
 
-    def set_feeds(self, tree: Folder) -> None:   
+
+    def set_feeds(self, tree: Folder) -> None:
+        """Replaces the data in the model with new data."""
         self.beginResetModel()
         self.tree = tree
         self.endResetModel()
@@ -348,9 +349,11 @@ class FeedViewModel(qtc.QAbstractItemModel):
         if role == qtc.Qt.DisplayRole:
             if orientation == qtc.Qt.Horizontal: # Horizontal
                 return self.definedrows.get(section, None)
+        return None
 
 
     def update_row(self, index: qtc.QModelIndex):
+        """Emits a data changed signal for a row in the feed view."""
         self.dataChanged.emit(self.index(index.row(), 0, index), self.index(index.row(), 1, index), [qtc.Qt.DisplayRole, qtc.Qt.FontRole])
 
 
@@ -361,6 +364,7 @@ class FeedViewModel(qtc.QAbstractItemModel):
 
 
 class VerifyDialog(qtw.QDialog):
+    """Line input dialog which does a check on the input before allowing it to be accepted."""
 
     def __init__(self, verify, prompt, window_title, default_text):
         qtw.QDialog.__init__(self, None, qtc.Qt.WindowCloseButtonHint | qtc.Qt.WindowTitleHint)
@@ -368,37 +372,39 @@ class VerifyDialog(qtw.QDialog):
         self.setObjectName(window_title)
 
         self.verify_function = verify
-        
-        vbox = qtw.QGridLayout()
-        vbox.addWidget(qtw.QLabel(prompt), 0, 0, 1, 2)
 
-        self.le = qtw.QLineEdit()
-        self.le.setText(default_text)
-        self.le.selectAll()
-        vbox.addWidget(self.le, 1, 0, 1, 2)
+        layout = qtw.QGridLayout()
+        layout.addWidget(qtw.QLabel(prompt), 0, 0, 1, 2)
 
-        buttonBox = qtw.QDialogButtonBox(qtw.QDialogButtonBox.Ok | qtw.QDialogButtonBox.Cancel)
-        buttonBox.accepted.connect(self.verify_response)
-        buttonBox.rejected.connect(self.reject)
-        vbox.addWidget(buttonBox, 2, 1, 1, 1)
+        self.input_field = qtw.QLineEdit()
+        self.input_field.setText(default_text)
+        self.input_field.selectAll()
+        layout.addWidget(self.input_field, 1, 0, 1, 2)
+
+        buttons = qtw.QDialogButtonBox(qtw.QDialogButtonBox.Ok | qtw.QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.verify_response)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons, 2, 1, 1, 1)
 
         self.error_label = qtw.QLabel("")
         self.error_label.setMinimumWidth(qtg.QFontMetrics(qtg.QFont()).width("Verify Failed"))
-        vbox.addWidget(self.error_label, 2, 0, 1, 1)
+        layout.addWidget(self.error_label, 2, 0, 1, 1)
 
-        vbox.setSizeConstraint(qtw.QLayout.SetFixedSize)
+        layout.setSizeConstraint(qtw.QLayout.SetFixedSize)
 
-        self.setLayout(vbox)
+        self.setLayout(layout)
 
         self.show()
 
     def verify_response(self):
+        """Checks if the input in the field is valid. Displays an error message if it is not."""
         self.error_label.setText("Verifying...")
         self.error_label.repaint()
-        if self.verify_function(self.le.text()):
+        if self.verify_function(self.input_field.text()):
             self.accept()
         else:
             self.error_label.setText("Verify Failed")
 
     def get_response(self):
-        return self.le.text()
+        """Returns the input from the user in the input field."""
+        return self.input_field.text()
