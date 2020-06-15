@@ -48,6 +48,7 @@ class Article:
         # attributes used by feed_manager
         self.feed_id: int = None
         self.unread: bool = None
+        self.flag: bool = False
 
 
 class Folder:

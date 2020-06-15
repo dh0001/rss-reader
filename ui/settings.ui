@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>477</width>
-    <height>186</height>
+    <width>476</width>
+    <height>209</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -37,7 +37,7 @@
            </sizepolicy>
           </property>
           <property name="text">
-           <string>Default time to automatically refresh feeds (0 to never refresh):</string>
+           <string>Default time to automatically update feeds (0 to never refresh):</string>
           </property>
          </widget>
         </item>
@@ -92,7 +92,7 @@
            </sizepolicy>
           </property>
           <property name="text">
-           <string>Minimum time between fetching feeds:</string>
+           <string>Minimum time between update feeds:</string>
           </property>
          </widget>
         </item>
@@ -233,6 +233,13 @@
          </spacer>
         </item>
        </layout>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="startupUpdate">
+        <property name="text">
+         <string>Update feeds on application startup</string>
+        </property>
+       </widget>
       </item>
      </layout>
     </widget>

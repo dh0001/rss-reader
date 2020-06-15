@@ -3,7 +3,7 @@ import PySide2.QtCore as qtc
 import PySide2.QtGui as qtg
 import PySide2.QtUiTools as qut
 
-from feed import Feed
+from feed import Feed, Article
 import feed_manager
 from settings import settings
 from feed_view import FeedView
@@ -22,8 +22,8 @@ class View(qtw.QMainWindow):
         self.article_view = ArticleView(self.feed_manager)
         self.feed_view = FeedView(self.feed_manager)
         self.content_view = TBrowser()
-        self.splitter1 = qtw.QSplitter(qtc.Qt.Vertical)
-        self.splitter2 = qtw.QSplitter(qtc.Qt.Horizontal)
+        self.article_content_splitter = qtw.QSplitter(qtc.Qt.Vertical)
+        self.feed_rhs_splitter = qtw.QSplitter(qtc.Qt.Horizontal)
         self.tray_icon = qtw.QSystemTrayIcon()
 
         self.gui()
@@ -32,8 +32,8 @@ class View(qtw.QMainWindow):
     def cleanup(self) -> None:
         """Saves panel states into settings."""
         settings["geometry"] = str(self.saveGeometry().toBase64(), 'utf-8')
-        settings["splitter1"] = str(self.splitter1.saveState().toBase64(), 'utf-8')
-        settings["splitter2"] = str(self.splitter2.saveState().toBase64(), 'utf-8')
+        settings["splitter1"] = str(self.article_content_splitter.saveState().toBase64(), 'utf-8')
+        settings["splitter2"] = str(self.feed_rhs_splitter.saveState().toBase64(), 'utf-8')
         settings["article_view_headers"] = str(self.article_view.header().saveState().toBase64(), 'utf-8')
         settings["feed_view_headers"] = str(self.feed_view.header().saveState().toBase64(), 'utf-8')
 
@@ -46,25 +46,25 @@ class View(qtw.QMainWindow):
         self.setWindowTitle('RSS Reader')
         # self.main_window.resize(800, 600)
 
-        main_widget = qtw.QWidget()
-        self.setCentralWidget(main_widget)
+        root_widget = qtw.QWidget()
+        self.setCentralWidget(root_widget)
 
         self.content_view.setOpenExternalLinks(True)
 
-        self.splitter1.addWidget(self.article_view)
-        self.splitter1.addWidget(self.content_view)
-        self.splitter2.addWidget(self.feed_view)
-        self.splitter2.addWidget(self.splitter1)
-        # self.splitter1.setSizes([200, 300])
-        # self.splitter2.setSizes([200, 500])
+        self.article_content_splitter.addWidget(self.article_view)
+        self.article_content_splitter.addWidget(self.content_view)
+        self.feed_rhs_splitter.addWidget(self.feed_view)
+        self.feed_rhs_splitter.addWidget(self.article_content_splitter)
+        # self.article_content_splitter.setSizes([200, 300])
+        # self.feed_rhs_splitter.setSizes([200, 500])
 
-        hbox = qtw.QHBoxLayout(main_widget)
-        hbox.addWidget(self.splitter2)
-        main_widget.setLayout(hbox)
+        hbox = qtw.QHBoxLayout(root_widget)
+        hbox.addWidget(self.feed_rhs_splitter)
+        root_widget.setLayout(hbox)
 
         menu_bar = self.menuBar().addMenu('Options')
-        menu_bar.addAction("Add feed...").triggered.connect(self.feed_view.prompt_add_feed)
-        menu_bar.addAction("Add folder...").triggered.connect(self.feed_view.prompt_add_folder)
+        menu_bar.addAction("Add root feed...").triggered.connect(self.feed_view.prompt_add_feed)
+        menu_bar.addAction("Add root folder...").triggered.connect(self.feed_view.prompt_add_folder)
         menu_bar.addAction("Update All Feeds").triggered.connect(self.refresh_all)
         menu_bar.addAction("Settings...").triggered.connect(self.settings_dialog)
         menu_bar.addSeparator()
@@ -80,14 +80,14 @@ class View(qtw.QMainWindow):
         self.tray_icon.show()
 
         self.restoreGeometry(qtc.QByteArray.fromBase64(bytes(settings["geometry"], "utf-8")))
-        self.splitter1.restoreState(qtc.QByteArray.fromBase64(bytes(settings["splitter1"], "utf-8")))
-        self.splitter2.restoreState(qtc.QByteArray.fromBase64(bytes(settings["splitter2"], "utf-8")))
+        self.article_content_splitter.restoreState(qtc.QByteArray.fromBase64(bytes(settings["splitter1"], "utf-8")))
+        self.feed_rhs_splitter.restoreState(qtc.QByteArray.fromBase64(bytes(settings["splitter2"], "utf-8")))
         self.feed_view.header().restoreState(qtc.QByteArray.fromBase64(bytes(settings["feed_view_headers"], "utf-8")))
         self.article_view.header().restoreState(qtc.QByteArray.fromBase64(bytes(settings["article_view_headers"], "utf-8")))
 
         self.feed_view.header().setSectionResizeMode(qtw.QHeaderView.Interactive)
         self.feed_view.feed_selected_event.connect(self.article_view.select_feed)
-        self.article_view.article_content_event.connect(self.output_content)
+        self.article_view.article_selected_event.connect(self.output_content)
         self.tray_icon.activated.connect(self.tray_activated)
         self.feed_manager.feeds_updated_event.connect(self.update_icon)
 
@@ -147,9 +147,9 @@ class View(qtw.QMainWindow):
                 self.activateWindow()
 
 
-    def output_content(self, content: str) -> None:
+    def output_content(self, article: Article) -> None:
         """Outputs html content to the content view."""
-        self.content_view.setHtml(content)
+        self.content_view.setHtml(article.content)
 
 
     def settings_dialog(self) -> None:

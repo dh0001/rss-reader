@@ -17,7 +17,7 @@ class ArticleView(qtw.QTreeView):
     article_selected_event fires when an article is selected.
     """
 
-    article_content_event = qtc.Signal(str)
+    article_selected_event = qtc.Signal(Article)
 
     def __init__(self, fm: FeedManager):
         super().__init__()
@@ -41,6 +41,9 @@ class ArticleView(qtw.QTreeView):
         self.feed_manager.article_updated_event.connect(self.article_view_model.update_article_data)
         self.feed_manager.new_article_event.connect(self.article_view_model.new_article)
 
+        self.setContextMenuPolicy(qtc.Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.article_context_menu)
+
 
     def refresh(self) -> None:
         """Refreshes the data in the ArticleView using feed_manager."""
@@ -61,16 +64,17 @@ class ArticleView(qtw.QTreeView):
 
 
     def selection_changed(self) -> None:
-        """Fires article_selected_event with the current selection.
+        """Fires article_selected_event with the current selection, also marks the article as read.
 
-        Should only be called from an event.
+        Should only be called by event.
         """
         index = self.currentIndex()
 
         if index.isValid():
-            if index.internalPointer().unread is True:
-                self.mark_article_read(index)
-            self.article_content_event.emit(index.internalPointer().content)
+            article = index.internalPointer()
+            if article.unread is True:
+                self.feed_manager.set_article_unread_status(self.current_feed, article, False)
+            self.article_selected_event.emit(article)
 
 
     def recieve_new_articles(self, articles: List[Article], feed_id: int) -> None:
@@ -85,32 +89,35 @@ class ArticleView(qtw.QTreeView):
         self.article_view_model.update_all_data()
 
 
-    def article_context_menu(self, position) -> None:
+    def article_context_menu(self, mouse_position) -> None:
         """Outputs the context menu for items in the article view."""
-        index = self.feed_view.indexAt(position)
+        index = self.indexAt(mouse_position)
 
         if index.isValid():
             menu = qtw.QMenu()
-            mark_read_action = menu.addAction("Mark Read")
-            mark_unread_action = menu.addAction("Mark Unread")
-            action = menu.exec_(self.feed_view.viewport().mapToGlobal(position))
+            article: Article = index.internalPointer()
 
-            if action == mark_read_action:
-                self.mark_article_read(index)
-            elif action == mark_unread_action:
-                self.mark_article_unread(index)
+            if article.unread:
+                toggle_action = menu.addAction("Mark Read")
+            else:
+                toggle_action = menu.addAction("Mark Unread")
+            if article.flag:
+                flag_action = menu.addAction("Unflag Article")
+            else:
+                flag_action = menu.addAction("Flag Article")
 
+            action = menu.exec_(self.viewport().mapToGlobal(mouse_position))
 
-    def mark_article_read(self, index) -> None:
-        """Tells the feed manager to mark the indicated article as read."""
-        self.feed_manager.set_article_unread_status(self.current_feed, index.internalPointer().identifier, False)
-        self.article_view_model.update_row_unread_status(index, False)
+            if action == toggle_action:
+                if article.unread:
+                    self.feed_manager.set_article_unread_status(self.current_feed, article, False)
+                else:
+                    self.feed_manager.set_article_unread_status(self.current_feed, article, True)
+                self.article_view_model.update_row_unread_status(index)
+            elif action == flag_action:
+                self.feed_manager.toggle_article_flag(article)
+                self.article_view_model.update_row_unread_status(index)
 
-
-    def mark_article_unread(self, index) -> None:
-        """Tells the feed manager to mark the indicated article as unread."""
-        self.feed_manager.set_article_unread_status(index.internalPointer().identifier, True)
-        self.article_view_model.update_row_unread_status(index, True)
 
 
 
@@ -162,25 +169,29 @@ class ArticleViewModel(qtc.QAbstractItemModel):
         return 3
 
 
-    def data(self, in_index, role):
+    def data(self, index, role):
         """Returns data about an index."""
-        if not in_index.isValid():
+        if not index.isValid():
             return None
 
         if role in (qtc.Qt.DisplayRole, qtc.Qt.ToolTipRole):
-            if in_index.column() == 0:
-                return self.articles[in_index.row()].title
-            if in_index.column() == 1:
-                return self.articles[in_index.row()].author
-            if in_index.column() == 2:
-                return self.articles[in_index.row()].updated.astimezone().strftime('%a %b %d, %Y %I:%M %p')
+            if index.column() == 0:
+                return index.internalPointer().title
+            if index.column() == 1:
+                return index.internalPointer().author
+            if index.column() == 2:
+                return index.internalPointer().updated.astimezone().strftime('%a %b %d, %Y %I:%M %p')
 
         elif role == qtc.Qt.FontRole:
             font = qtg.QFont()
             font.setPointSize(settings["font_size"])
-            if self.articles[in_index.row()].unread is True:
+            if index.internalPointer().unread is True:
                 font.setBold(True)
             return font
+
+        elif role == qtc.Qt.ForegroundRole:
+            if index.internalPointer().flag is True:
+                return qtg.QColor(qtc.Qt.red)
 
         return None
 
@@ -213,11 +224,16 @@ class ArticleViewModel(qtc.QAbstractItemModel):
         self.sort(self.view.header().sortIndicatorSection(), self.view.header().sortIndicatorOrder())
 
 
-    def update_row_unread_status(self, index, value):
+    def update_row_unread_status(self, index):
         """Emits a change in the unread status for a row in the article view."""
         row = index.row()
-        index.internalPointer().unread = value
         self.dataChanged.emit(self.index(row, 0), self.index(row, 0), [qtc.Qt.FontRole])
+
+
+    def update_row_flag_status(self, index):
+        """Emits a change in the flag status for a row in the article view."""
+        row = index.row()
+        self.dataChanged.emit(self.index(row, 0), self.index(row, 0), [qtc.Qt.ForegroundRole])
 
 
     def update_article_data(self, article):

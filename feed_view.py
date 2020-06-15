@@ -9,8 +9,9 @@ from settings import settings
 
 
 class FeedView(qtw.QTreeView):
-    """
-    A view for displaying feeds. feed_selected_event fires when a feed is selected.
+    """A tree view for displaying feeds.
+
+    feed_selected_event fires when a feed is selected.
     It should be the sole interface for interacting with the feeds in the feed manager,
     and there should only be one of these views.
     """
@@ -62,9 +63,7 @@ class FeedView(qtw.QTreeView):
 
 
     def feed_context_menu(self, position) -> None:
-        """
-        Outputs the context menu for items in the feed view.
-        """
+        """Outputs the context menu for items in the feed view."""
         index = self.indexAt(position)
 
         if index.isValid():
