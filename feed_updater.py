@@ -33,7 +33,7 @@ class UpdateThread(qtc.QThread):
         A value of `None` for feed indicates it the entry for global refresh."""
         __slots__ = 'scheduled', 'time'
 
-        def __init__(self, scheduled: Union[Feed, None], t: int):
+        def __init__(self, scheduled: Union[Feed, None], t: float):
             self.scheduled = scheduled  # a value of None indicates global refresh
             self.time = t
 
@@ -46,7 +46,7 @@ class UpdateThread(qtc.QThread):
         self.feeds = feeds
         self.settings = settings
         self.schedule_lock = threading.Lock()
-        self.queue = queue.SimpleQueue()
+        self.queue: queue.SimpleQueue = queue.SimpleQueue()
 
         for feed in self.feeds:
             if feed.refresh_rate is not None and feed.refresh_rate != 0:

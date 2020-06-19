@@ -21,6 +21,7 @@ class Feed:
         self.refresh_rate: Union[int, None] = None
         self.ignore_new: bool = False
         self.delete_time: Union[int, None] = None
+        self.unread_count: int = 0
 
 
     def __iter__(self):
@@ -109,7 +110,7 @@ templates = {
 }
 
 
-def download(uri: str) -> any:
+def download(uri: str) -> requests.Response:
     """Downloads text file with the application's header."""
     headers = {'User-Agent': 'python-rss-reader'}
     try:
@@ -120,7 +121,7 @@ def download(uri: str) -> any:
     return request
 
 
-def get_feed(uri, template) -> Feed:
+def get_feed(uri, template) -> Tuple[Feed, List[Article]]:
     """Retrives and processes data for a feed from the internet."""
     return templates[template](uri)
 

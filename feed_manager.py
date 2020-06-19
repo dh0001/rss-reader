@@ -1,7 +1,7 @@
 import sqlite3
 import json
 import datetime
-from typing import List, Union
+from typing import List, Union, Dict
 import os
 
 from PySide2 import QtCore as qtc
@@ -159,7 +159,7 @@ class FeedManager(qtc.QObject):
         if article.unread != status:
             article.unread = status
             with self._connection:
-                self._connection.execute('''UPDATE articles SET unread = ? WHERE identifier = ?''', [status, article.identifier])
+                self._connection.execute('''UPDATE articles SET unread = ? WHERE identifier = ? and feed_id = ?''', [status, article.identifier, article.feed_id])
             feed.unread_count = self._get_unread_articles_count(feed)
             self.feeds_updated_event.emit()
 
@@ -168,7 +168,7 @@ class FeedManager(qtc.QObject):
         """Inverts flag status on an article."""
         article.flag = not article.flag
         with self._connection:
-            self._connection.execute('''UPDATE articles SET flag = ? WHERE identifier = ?''', [article.flag, article.identifier])
+            self._connection.execute('''UPDATE articles SET flag = ? WHERE identifier = ? and feed_id = ?''', [article.flag, article.identifier, article.feed_id])
 
 
     def set_refresh_rate(self, feed: Feed, rate: Union[int, None]) -> None:
@@ -284,7 +284,7 @@ class FeedManager(qtc.QObject):
             return self._connection.execute('''SELECT count(*) FROM articles WHERE unread = 1 AND feed_id = ?''', [feed.db_id]).fetchone()[0]
 
 
-    def _get_article_identifiers(self, feed_id: int) -> set:
+    def _get_article_identifiers(self, feed_id: int) -> Dict[str, datetime.datetime]:
         """Returns a set containing all the identifiers of all articles for a feed."""
         articles = {}
         with self._connection:

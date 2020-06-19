@@ -1,6 +1,6 @@
 import operator
 import logging
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import PySide2.QtWidgets as qtw
 import PySide2.QtCore as qtc
@@ -26,7 +26,7 @@ class ArticleView(qtw.QTreeView):
         self.feed_manager = fm
 
         # the currently viewed feed
-        self.current_feed: Feed = None
+        self.current_feed: Union[None, Feed] = None
 
         # model used by this treeview
         self.article_view_model = ArticleViewModel(self)
@@ -54,7 +54,7 @@ class ArticleView(qtw.QTreeView):
         return
 
 
-    def select_feed(self, feed: Optional[Feed]) -> None:
+    def select_feed(self, feed: Union[None, Feed] = None) -> None:
         """Changes which feed's articles should be shown in the view.
 
         If feed is unspecified, the view will be blank.
@@ -73,6 +73,9 @@ class ArticleView(qtw.QTreeView):
         if index.isValid():
             article = index.internalPointer()
             if article.unread is True:
+                if self.current_feed is None:
+                    logging.error("current feed is none, but article was selected!")
+                    return
                 self.feed_manager.set_article_unread_status(self.current_feed, article, False)
             self.article_selected_event.emit(article)
 
@@ -92,6 +95,9 @@ class ArticleView(qtw.QTreeView):
     def article_context_menu(self, mouse_position) -> None:
         """Outputs the context menu for items in the article view."""
         index = self.indexAt(mouse_position)
+
+        if self.current_feed is None:
+            return
 
         if index.isValid():
             menu = qtw.QMenu()
