@@ -101,7 +101,7 @@ class FeedManager(qtc.QObject):
         Removes a feed with passed feed_id, and its entry from the refresh schedule.
         """
         if feed.refresh_rate is not None:
-            self._refresh_schedule_remove_item(feed)
+            self._scheduler_thread.remove_feed(feed)
 
         assert feed.parent_folder.children.index(feed) != -1, "Folder was not found when trying to delete it!"
         del feed.parent_folder.children[feed.parent_folder.children.index(feed)]
@@ -380,9 +380,3 @@ class FeedManager(qtc.QObject):
         with self._connection:
             self._connection.execute('''DELETE from articles WHERE updated < ? and feed_id = ?''', [cutoff_time.timestamp(), feed_id])
 
-
-    def _refresh_schedule_remove_item(self, feed: Feed) -> None:
-        """Removes an item from the refresh schedule."""
-        i = next(i for (i, v) in enumerate(self._refresh_schedule) if v.feed.db_id == feed.db_id)
-        del self._refresh_schedule[i]
-        self._scheduler_thread.schedule_update_event.set()

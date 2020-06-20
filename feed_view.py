@@ -123,10 +123,10 @@ class FeedView(qtw.QTreeView):
         Opens a message box prompt which confirms if the user wants to delete a feed.
         Deletes a feed from the view, then tells the feed manager to remove it from the database.
         """
-        feed = index.internalPointer()
+        feed: Feed = index.internalPointer()
         response = qtw.QMessageBox.question(None, "Prompt", "Are you sure you want to delete '" + (feed.user_title if feed.user_title is not None else feed.title) + "'?", qtw.QMessageBox.Yes | qtw.QMessageBox.No)
         if response == qtw.QMessageBox.Yes:
-            self.feed_view_model.beginRemoveRows(index.parent(), feed.row, feed.row)
+            self.feed_view_model.beginRemoveRows(index.parent(), index.row(), index.row())
             self.feed_manager.delete_feed(feed)
             self.feed_view_model.endRemoveRows()
 
@@ -165,11 +165,11 @@ class FeedView(qtw.QTreeView):
 
     def prompt_delete_folder(self, index: qtc.QModelIndex) -> None:
         """Opens a message box prompt which confirms if the user wants to delete a folder."""
-        folder = index.internalPointer()
+        folder: Folder = index.internalPointer()
         response = qtw.QMessageBox.question(None, "Prompt", "Are you sure you want to delete '" + folder.title + "'?", qtw.QMessageBox.Yes | qtw.QMessageBox.No)
         if response == qtw.QMessageBox.Yes:
 
-            self.feed_view_model.beginRemoveRows(index.parent(), folder.row, folder.row)
+            self.feed_view_model.beginRemoveRows(index.parent(), index.row(), index.row())
             self.feed_manager.delete_folder(folder)
             self.feed_view_model.endRemoveRows()
 

@@ -169,3 +169,10 @@ class UpdateThread(qtc.QThread):
                 self.schedule.add(UpdateThread.Entry(feed, time.time() + feed.refresh_rate))
 
         self.schedule_update_event.set()
+
+
+    def remove_feed(self, feed: Feed) -> None:
+        """Removes an item from the refresh schedule."""
+        i = next(i for (i, v) in enumerate(self.schedule) if v.scheduled is not None and v.scheduled.db_id == feed.db_id)
+        del self.schedule[i]
+        self.schedule_update_event.set()
