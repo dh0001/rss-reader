@@ -1,3 +1,5 @@
+from typing import Any
+
 import PySide2.QtWidgets as qtw
 import PySide2.QtCore as qtc
 import PySide2.QtGui as qtg
@@ -139,7 +141,7 @@ class FeedView(qtw.QTreeView):
         dialog = VerifyDialog(lambda x: True, "Add Folder:", "Add Folder", "")
         if dialog.exec_() == qtw.QDialog.Accepted:
             if index:
-                folder = index.internalPointer()
+                folder: Folder = index.internalPointer()
             else:
                 folder = self.feeds_cache
                 index = qtc.QModelIndex()
@@ -269,9 +271,9 @@ class FeedViewModel(qtc.QAbstractItemModel):
 
     def rowCount(self, in_index: qtc.QModelIndex):
         if in_index.isValid():
-            node = in_index.internalPointer()
+            node: Any = in_index.internalPointer()
             if type(node) is Folder:
-                return len(in_index.internalPointer().children)
+                return len(node.children)
             return 0
         return len(self.tree.children)
 

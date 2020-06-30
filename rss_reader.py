@@ -26,6 +26,7 @@ try:
     feed_manager.cleanup()
     view.cleanup()
     settings.save_settings()
+
 except BaseException:
     logging.exception("Exception thrown!")
 

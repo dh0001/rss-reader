@@ -8,6 +8,7 @@ Open source feed reading application.
 * requests
 * defusedxml
 * sortedcontainers
+* python-dateutil
 
 ## Usage
 

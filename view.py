@@ -182,8 +182,8 @@ class View(qtw.QMainWindow):
                 self.article_view.update_all_data()
                 self.feed_view.update_all_data()
 
-            if window.startupUpdate.value() != settings["startup_update"]:
-                settings["startup_update"] = window.startupUpdate.value()
+            if window.startupUpdate.isChecked() != settings["startup_update"]:
+                settings["startup_update"] = window.startupUpdate.isChecked()
 
 
 class TBrowser(qtw.QTextBrowser):

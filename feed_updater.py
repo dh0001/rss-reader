@@ -70,7 +70,7 @@ class UpdateThread(qtc.QThread):
                         self.queue.put(feed)
                         assert feed.refresh_rate != 0
                         if feed.refresh_rate is not None and feed.refresh_rate != 0:
-                            self.schedule.add(UpdateThread.Entry(feed, time.time() + feed.refresh_rate))
+                            self.schedule.add(UpdateThread.Entry(feed, feed.refresh_rate + time.time()))
 
                     else:
                         # global refresh

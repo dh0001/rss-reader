@@ -1,6 +1,6 @@
 import operator
 import logging
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Any
 
 import PySide2.QtWidgets as qtw
 import PySide2.QtCore as qtc
@@ -11,12 +11,25 @@ from feed_manager import FeedManager
 from settings import settings
 
 
+class ArticleFilter(qtw.QWidget):
+    """A view for displaying articles, and a textbox for filtering them.
+
+    article_selected_event fires when an article is selected.
+    """
+    article_selected_event = qtc.Signal(str)
+
+    def __init__(self, fm: FeedManager):
+        super().__init__()
+
+        self.lay = qtw.QVBoxLayout()
+        self.setLayout(self.lay)
+
+
 class ArticleView(qtw.QTreeView):
     """A view for displaying articles.
 
     article_selected_event fires when an article is selected.
     """
-
     article_selected_event = qtc.Signal(Article)
 
     def __init__(self, fm: FeedManager):
@@ -71,7 +84,7 @@ class ArticleView(qtw.QTreeView):
         index = self.currentIndex()
 
         if index.isValid():
-            article = index.internalPointer()
+            article: Article = index.internalPointer()
             if article.unread is True:
                 if self.current_feed is None:
                     logging.error("current feed is none, but article was selected!")
@@ -142,7 +155,7 @@ class ArticleViewModel(qtc.QAbstractItemModel):
         self.view = view
 
 
-    def rowCount(self, index: qtc.QModelIndex):
+    def rowCount(self, index: qtc.QModelIndex) -> int:
         """Returns the number of rows."""
         # so index points to an article
         if index.isValid():

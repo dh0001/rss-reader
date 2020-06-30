@@ -1,8 +1,10 @@
 import sqlite3
 import json
 import datetime
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Any
 import os
+import time
+import logging
 
 from PySide2 import QtCore as qtc
 
@@ -45,7 +47,8 @@ class FeedManager(qtc.QObject):
 
         self._scheduler_thread.requestInterruption()
         self._scheduler_thread.schedule_update_event.set()
-        self._scheduler_thread.wait()
+        if self._scheduler_thread.wait(0.5) is False:
+            logging.info("not enough time to stop thread 0.5")
         self._save_feeds()
         self._connection.close()
 
@@ -379,4 +382,3 @@ class FeedManager(qtc.QObject):
         """Deletes articles in the database which are not after the passed time_limit."""
         with self._connection:
             self._connection.execute('''DELETE from articles WHERE updated < ? and feed_id = ?''', [cutoff_time.timestamp(), feed_id])
-
