@@ -95,11 +95,27 @@ def atom_rss_template(uri: str) -> Tuple[Feed, List[Article]]:
         else:
             author = top_author
 
+        # required for atom rss
         article.identifier = xml_article.find("{http://www.w3.org/2005/Atom}id").text
         article.title = xml_article.find("{http://www.w3.org/2005/Atom}title").text
         article.updated = dateutil.parser.isoparse(xml_article.find("{http://www.w3.org/2005/Atom}updated").text)
-        article.content = xml_article.find("{http://www.w3.org/2005/Atom}content").text
-        article.uri = xml_article.find("{http://www.w3.org/2005/Atom}link").attrib["href"]
+
+        # optional for atom rss
+        content = xml_article.find("{http://www.w3.org/2005/Atom}content")
+        if content is None:
+            article.content = ""
+        else:
+            article.content = content.text
+        
+        link = xml_article.find("{http://www.w3.org/2005/Atom}link")
+        if link is None:
+            article.link = ""
+        else:
+            article.uri = link.attrib["href"]
+
+        articles.append(article)
+
+    return feed, articles
         articles.append(article)
 
     return feed, articles
@@ -127,4 +143,6 @@ def get_feed(uri, template) -> Tuple[Feed, List[Article]]:
 
 
 if __name__ == "__main__":
-    test = get_feed("https://www.reddit.com/.rss", "rss")
+    # test = get_feed("https://www.reddit.com/.rss", "rss")
+    test = get_feed("https://www.youtube.com/feeds/videos.xml?channel_id=UC18NaGQLruOEw65eQE3bNbg", "rss")
+    1
