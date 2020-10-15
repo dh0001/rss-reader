@@ -116,9 +116,7 @@ def atom_rss_template(uri: str) -> Tuple[Feed, List[Article]]:
         articles.append(article)
 
     return feed, articles
-        articles.append(article)
 
-    return feed, articles
 
 
 templates = {
