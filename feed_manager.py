@@ -1,7 +1,7 @@
 import sqlite3
 import json
 import datetime
-from typing import List, Union, Dict, Any
+from typing import List, Union, Dict
 import os
 import time
 import logging
@@ -288,7 +288,7 @@ class FeedManager(qtc.QObject):
 
 
     def _get_article_identifiers(self, feed_id: int) -> Dict[str, datetime.datetime]:
-        """Returns a set containing all the identifiers of all articles for a feed."""
+        """Returns a dict containing all the identifiers of all articles for a feed."""
         articles = {}
         with self._connection:
             for article in self._connection.execute('''SELECT identifier, updated FROM articles WHERE feed_id = ?''', [feed_id]):

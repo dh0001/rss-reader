@@ -2,6 +2,8 @@ from typing import List, Union, Tuple
 import requests
 import defusedxml.ElementTree as defusxml
 import dateutil.parser
+import logging
+import webbrowser
 
 
 class Feed:
@@ -120,7 +122,11 @@ def atom_rss_template(uri: str) -> Tuple[Feed, List[Article]]:
 
 
 templates = {
-    "rss": atom_rss_template
+    "rss": atom_rss_template,
+}
+
+actions = {
+    "rss": open_link,
 }
 
 
@@ -138,6 +144,11 @@ def download(uri: str) -> requests.Response:
 def get_feed(uri, template) -> Tuple[Feed, List[Article]]:
     """Retrives and processes data for a feed from the internet."""
     return templates[template](uri)
+
+
+def apply_action(feed: Feed, article: Article):
+    actions[feed.template](article)
+
 
 
 if __name__ == "__main__":

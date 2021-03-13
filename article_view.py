@@ -1,12 +1,12 @@
 import operator
 import logging
-from typing import List, Optional, Union, Any
+from typing import List, Optional, Union
 
 import PySide2.QtWidgets as qtw
 import PySide2.QtCore as qtc
 import PySide2.QtGui as qtg
 
-from feed import Feed, Article
+from feed import Feed, Article, apply_action
 from feed_manager import FeedManager
 from settings import settings
 
@@ -21,8 +21,8 @@ class ArticleFilter(qtw.QWidget):
     def __init__(self, fm: FeedManager):
         super().__init__()
 
-        self.lay = qtw.QVBoxLayout()
-        self.setLayout(self.lay)
+        self.layout = qtw.QVBoxLayout()
+        self.setLayout(self.layout)
 
 
 class ArticleView(qtw.QTreeView):
@@ -56,6 +56,7 @@ class ArticleView(qtw.QTreeView):
 
         self.setContextMenuPolicy(qtc.Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.article_context_menu)
+        self.doubleClicked.connect(self.double_click_event)
 
 
     def refresh(self) -> None:
@@ -98,6 +99,7 @@ class ArticleView(qtw.QTreeView):
 
         Only adds articles which are the same as the currently highlighted feed
         """
+        pass
 
 
     def update_all_data(self) -> None:
@@ -136,6 +138,16 @@ class ArticleView(qtw.QTreeView):
             elif action == flag_action:
                 self.feed_manager.toggle_article_flag(article)
                 self.article_view_model.update_row_unread_status(index)
+
+
+    def double_click_event(self, index) -> None:
+
+        if index.isValid():
+            menu = qtw.QMenu()
+            article: Article = index.internalPointer()
+
+            apply_action(self.current_feed, article)
+
 
 
 
