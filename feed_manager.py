@@ -10,6 +10,7 @@ from PySide2 import QtCore as qtc
 
 from feed import Feed, Article, Folder, get_feed
 from feed_updater import UpdateThread
+from settings import settings
 
 
 class FeedManager(qtc.QObject):
@@ -19,19 +20,18 @@ class FeedManager(qtc.QObject):
     article_updated_event = qtc.Signal(Article)
     feeds_updated_event = qtc.Signal()
 
-    def __init__(self, settings: dict):
+    def __init__(self):
         super().__init__()
 
         # feed_cache is a folder, and the 'root' folder for the feed manager.
         # Currently done like this for easier setting of parents, adding to folder, and refresh.
         self.feed_cache = self._load_feeds()
 
-        self.settings = settings
-        self._connection = sqlite3.connect(self.settings["db_file"])
+        self._connection = sqlite3.connect(settings["db_file"])
         self._connection.row_factory = sqlite3.Row
 
         # create and start scheduler thread
-        self._scheduler_thread = UpdateThread(self.feed_cache, self.settings)
+        self._scheduler_thread = UpdateThread(self.feed_cache, settings)
 
         self._initialize_database()
 
@@ -49,7 +49,7 @@ class FeedManager(qtc.QObject):
         self._scheduler_thread.schedule_update_event.set()
         if self._scheduler_thread.wait(0.5) is False:
             logging.info("not enough time to stop thread 0.5")
-        self._save_feeds()
+        # self._save_feeds()
         self._connection.close()
 
 
@@ -88,8 +88,8 @@ class FeedManager(qtc.QObject):
         feed.template = "rss"
 
         # feed_counter should always be free
-        feed.db_id = self.settings["feed_counter"]
-        self.settings["feed_counter"] += 1
+        feed.db_id = settings["feed_counter"]
+        settings["feed_counter"] += 1
 
         folder.children.append(feed)
 
@@ -345,7 +345,7 @@ class FeedManager(qtc.QObject):
         if feed.delete_time is not None:
             limit = feed.delete_time
         else:
-            limit = self.settings["default_delete_time"]
+            limit = settings["default_delete_time"]
 
         if limit == 0:
             date_cutoff = None
