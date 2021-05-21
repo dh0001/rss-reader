@@ -1,7 +1,7 @@
-import PySide2.QtWidgets as qtw
-import PySide2.QtCore as qtc
-import PySide2.QtGui as qtg
-import PySide2.QtUiTools as qut
+import PySide6.QtWidgets as qtw
+import PySide6.QtCore as qtc
+import PySide6.QtGui as qtg
+import PySide6.QtUiTools as qut
 
 from feed import Feed, Article
 import feed_manager
@@ -166,7 +166,7 @@ class View(qtw.QMainWindow):
         window.setWindowFlags(qtc.Qt.WindowCloseButtonHint | qtc.Qt.WindowTitleHint)
 
         window.show()
-        if window.exec_() == qtw.QDialog.Accepted:
+        if window.exec() == qtw.QDialog.Accepted:
 
             if window.globalRefresh.value() != settings["refresh_time"]:
                 self.feed_manager.set_default_refresh_rate(window.globalRefresh.value())

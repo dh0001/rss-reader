@@ -2,9 +2,9 @@ import operator
 import logging
 from typing import List, Optional, Union
 
-import PySide2.QtWidgets as qtw
-import PySide2.QtCore as qtc
-import PySide2.QtGui as qtg
+import PySide6.QtWidgets as qtw
+import PySide6.QtCore as qtc
+import PySide6.QtGui as qtg
 
 from feed import Feed, Article, apply_action
 from feed_manager import FeedManager

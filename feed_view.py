@@ -1,9 +1,9 @@
 from typing import Any
 
-import PySide2.QtWidgets as qtw
-import PySide2.QtCore as qtc
-import PySide2.QtGui as qtg
-from PySide2.QtUiTools import QUiLoader
+import PySide6.QtWidgets as qtw
+import PySide6.QtCore as qtc
+import PySide6.QtGui as qtg
+from PySide6.QtUiTools import QUiLoader
 
 from feed import Feed, Folder
 import feed_manager
@@ -69,14 +69,14 @@ class FeedView(qtw.QTreeView):
         index = self.indexAt(position)
 
         if index.isValid():
-            node = index.internalPointer()
+            node: Feed = index.internalPointer()
             menu = qtw.QMenu()
 
             if type(node) is Feed:
                 refresh = menu.addAction("Refresh Feed")
                 delete = menu.addAction("Delete Feed")
                 options = menu.addAction("Feed Options...")
-                action = menu.exec_(self.viewport().mapToGlobal(position))
+                action = menu.exec(self.viewport().mapToGlobal(position))
                 if action == delete:
                     self.prompt_delete_feed(index)
                 elif action == refresh:
@@ -109,7 +109,7 @@ class FeedView(qtw.QTreeView):
         dialog = VerifyDialog(self.feed_manager.verify_feed_url, "Add Feed:", "Add Feed", "")
         if dialog.exec_() == qtw.QDialog.Accepted:
             if index:
-                folder = index.internalPointer()
+                folder: Folder = index.internalPointer()
             else:
                 folder = self.feeds_cache
                 index = qtc.QModelIndex()
@@ -157,7 +157,7 @@ class FeedView(qtw.QTreeView):
         dialog = VerifyDialog(lambda x: True, "Rename Folder:", "Rename Folder", "")
         if dialog.exec_() == qtw.QDialog.Accepted:
             if index:
-                folder = index.internalPointer()
+                folder: Folder = index.internalPointer()
             else:
                 folder = self.feeds_cache
                 index = qtc.QModelIndex()
@@ -180,7 +180,7 @@ class FeedView(qtw.QTreeView):
         """
         Opens a dialog which allows the user to enter a custom title for a feed.
         """
-        feed = index.internalPointer()
+        feed: Feed = index.internalPointer()
         dialog = VerifyDialog(lambda x: True, "Title:", "Set Title", feed.user_title if feed.user_title is not None else feed.title)
         if dialog.exec_() == qtw.QDialog.Accepted:
             response = dialog.get_response() if dialog.get_response() != "" else None
@@ -192,7 +192,7 @@ class FeedView(qtw.QTreeView):
         """
         Opens a dialog which allows the user to set a feed's refresh rate.
         """
-        feed = index.internalPointer()
+        feed: Feed = index.internalPointer()
         dialog = VerifyDialog(lambda x: x.isdigit() or x == "", "Refresh Rate (seconds):", "Set Refresh Rate", str(feed.refresh_rate))
         if dialog.exec_() == qtw.QDialog.Accepted:
             response = int(dialog.get_response()) if dialog.get_response() != "" else None

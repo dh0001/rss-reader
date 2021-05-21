@@ -4,7 +4,7 @@ import queue
 import logging
 from typing import Union
 
-from PySide2 import QtCore as qtc
+from PySide6 import QtCore as qtc
 from sortedcontainers import SortedKeyList
 
 from feed import Feed, Folder, get_feed
@@ -30,7 +30,8 @@ class UpdateThread(qtc.QThread):
         """Entries in the scheduler.
 
         Holds a feed, and the time it should be refreshed.
-        A value of `None` for feed indicates it the entry for global refresh."""
+        A value of `None` for feed indicates it the entry for global refresh.
+        """
         __slots__ = 'scheduled', 'time'
 
         def __init__(self, scheduled: Union[Feed, None], t: float):

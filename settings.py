@@ -39,8 +39,9 @@ class Settings():
 
     def save_settings(self):
         """Outputs settings to file."""
+        value = json.dumps(self.settings, indent=4)
         with open(_settings_file, "w") as settings_file:
-            settings_file.write(json.dumps(self.settings, indent=4))
+            settings_file.write(value)
 
 
 settings = Settings()

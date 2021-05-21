@@ -121,12 +121,17 @@ def atom_rss_template(uri: str) -> Tuple[Feed, List[Article]]:
 
 
 
+
+def open_feed_uri_in_browser(article):
+    webbrowser.open(article.uri)
+
+
 templates = {
     "rss": atom_rss_template,
 }
 
 actions = {
-    "rss": open_link,
+    "rss": open_feed_uri_in_browser,
 }
 
 

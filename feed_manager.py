@@ -3,10 +3,9 @@ import json
 import datetime
 from typing import List, Union, Dict
 import os
-import time
 import logging
 
-from PySide2 import QtCore as qtc
+from PySide6 import QtCore as qtc
 
 from feed import Feed, Article, Folder, get_feed
 from feed_updater import UpdateThread
@@ -35,7 +34,7 @@ class FeedManager(qtc.QObject):
 
         self._initialize_database()
 
-        self._scheduler_thread.data_downloaded_event.connect(self._update_feed_with_data)
+        self._scheduler_thread.data_downloaded_event.connect(self._handle_data_downloaded)
         self._scheduler_thread.start()
 
         if settings["startup_update"] is True:
@@ -174,19 +173,6 @@ class FeedManager(qtc.QObject):
             self._connection.execute('''UPDATE articles SET flag = ? WHERE identifier = ? and feed_id = ?''', [article.flag, article.identifier, article.feed_id])
 
 
-    def set_refresh_rate(self, feed: Feed, rate: Union[int, None]) -> None:
-        """Sets the refresh rate for an individual feed.
-
-        and sets/resets the scheduled refresh for that feed."""
-        self._scheduler_thread.update_refresh_rate(feed, rate)
-
-
-    @staticmethod
-    def set_feed_user_title(feed: Feed, user_title: Union[str, None]) -> None:
-        """Sets a user specified title for a feed."""
-        feed.user_title = user_title
-
-
     def set_default_refresh_rate(self, rate: int) -> None:
         """Sets the default refresh rate for feeds and resets the scheduled default refresh."""
         self._scheduler_thread.update_global_refresh_rate(rate)
@@ -198,15 +184,15 @@ class FeedManager(qtc.QObject):
         Will check if value is same as previous value, and will not update if that is the case.
         Saves feed changes to disk."""
         if feed.refresh_rate != refresh_rate:
-            self.set_refresh_rate(feed, refresh_rate)
+            self._scheduler_thread.update_refresh_rate(feed, rate)
 
         if feed.user_title != user_title:
-            self.set_feed_user_title(feed, user_title)
+            feed.user_title = user_title
 
         feed.delete_time = delete_time
         feed.ignore_new = ignore_new_articles
-        self.feeds_updated_event.emit()
         self._save_feeds()
+        self.feeds_updated_event.emit()
 
 
     @staticmethod
@@ -307,7 +293,7 @@ class FeedManager(qtc.QObject):
                     [feed_id, article.identifier, article.uri, article.title, article.updated.timestamp(), article.author, article.content, True, False])
 
 
-    def _update_feed_with_data(self, feed: Feed, new_feed_data: Feed, articles: List[Article]):
+    def _handle_data_downloaded(self, feed: Feed, new_feed_data: Feed, articles: List[Article]):
         """Recieves updated or new feed data."""
         # update feed
         feed.update(new_feed_data)
@@ -318,7 +304,7 @@ class FeedManager(qtc.QObject):
 
 
     def _update_articles(self, articles):
-        """Updates an existing article in the database."""
+        """Updates multiple existing articles in the database."""
         with self._connection:
             for article in articles:
                 self._connection.execute(
@@ -364,7 +350,6 @@ class FeedManager(qtc.QObject):
 
             if article.identifier in known_ids:
                 if known_ids[article.identifier] > article.updated:
-                    self._update_article(article)
                     updated_articles.append(article)
 
             else:

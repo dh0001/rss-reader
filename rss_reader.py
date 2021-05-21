@@ -1,9 +1,7 @@
-# packages
 import logging
 
-import PySide2.QtWidgets as qtw
+import PySide6.QtWidgets as qtw
 
-# own modules
 import feed_manager
 import view
 
@@ -18,7 +16,7 @@ view = view.View(feed_manager)
 
 try:
     # start program
-    app.exec_()
+    app.exec()
 
     # cleanup
     feed_manager.cleanup()
