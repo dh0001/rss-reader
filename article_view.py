@@ -127,7 +127,7 @@ class ArticleView(qtw.QTreeView):
             else:
                 flag_action = menu.addAction("Flag Article")
 
-            action = menu.exec_(self.viewport().mapToGlobal(mouse_position))
+            action = menu.exec(self.viewport().mapToGlobal(mouse_position))
 
             if action == toggle_action:
                 if article.unread:

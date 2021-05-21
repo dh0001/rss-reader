@@ -90,7 +90,7 @@ class FeedView(qtw.QTreeView):
                 add_folder = menu.addAction("Add Folder...")
                 rename_folder = menu.addAction("Rename...")
                 delete_folder = menu.addAction("Delete Folder")
-                action = menu.exec_(self.viewport().mapToGlobal(position))
+                action = menu.exec(self.viewport().mapToGlobal(position))
                 if action == add_feed:
                     self.prompt_add_feed(index)
                 elif action == add_folder:
@@ -107,7 +107,7 @@ class FeedView(qtw.QTreeView):
         Opens a dialog allowing a user to enter a url for a new feed.
         """
         dialog = VerifyDialog(self.feed_manager.verify_feed_url, "Add Feed:", "Add Feed", "")
-        if dialog.exec_() == qtw.QDialog.Accepted:
+        if dialog.exec() == qtw.QDialog.Accepted:
             if index:
                 folder: Folder = index.internalPointer()
             else:
@@ -139,7 +139,7 @@ class FeedView(qtw.QTreeView):
         Adds a folder to the feed database, with the passed index as a parent.
         """
         dialog = VerifyDialog(lambda x: True, "Add Folder:", "Add Folder", "")
-        if dialog.exec_() == qtw.QDialog.Accepted:
+        if dialog.exec() == qtw.QDialog.Accepted:
             if index:
                 folder: Folder = index.internalPointer()
             else:
@@ -155,7 +155,7 @@ class FeedView(qtw.QTreeView):
         Opens a dialog allowing a user to rename a folder.
         """
         dialog = VerifyDialog(lambda x: True, "Rename Folder:", "Rename Folder", "")
-        if dialog.exec_() == qtw.QDialog.Accepted:
+        if dialog.exec() == qtw.QDialog.Accepted:
             if index:
                 folder: Folder = index.internalPointer()
             else:
@@ -182,7 +182,7 @@ class FeedView(qtw.QTreeView):
         """
         feed: Feed = index.internalPointer()
         dialog = VerifyDialog(lambda x: True, "Title:", "Set Title", feed.user_title if feed.user_title is not None else feed.title)
-        if dialog.exec_() == qtw.QDialog.Accepted:
+        if dialog.exec() == qtw.QDialog.Accepted:
             response = dialog.get_response() if dialog.get_response() != "" else None
             self.feed_manager.set_feed_user_title(feed, response)
             self.feed_view_model.update_row(index)
@@ -194,7 +194,7 @@ class FeedView(qtw.QTreeView):
         """
         feed: Feed = index.internalPointer()
         dialog = VerifyDialog(lambda x: x.isdigit() or x == "", "Refresh Rate (seconds):", "Set Refresh Rate", str(feed.refresh_rate))
-        if dialog.exec_() == qtw.QDialog.Accepted:
+        if dialog.exec() == qtw.QDialog.Accepted:
             response = int(dialog.get_response()) if dialog.get_response() != "" else None
             self.feed_manager.set_refresh_rate(feed, response)
             self.feed_view_model.update_row(index)
@@ -230,7 +230,7 @@ class FeedView(qtw.QTreeView):
         window.setWindowFlags(qtc.Qt.WindowCloseButtonHint | qtc.Qt.WindowTitleHint)
 
         window.show()
-        if window.exec_() == qtw.QDialog.Accepted:
+        if window.exec() == qtw.QDialog.Accepted:
 
             def check_override_value_macro(checkbox_condition, field_value):
                 if checkbox_condition:
