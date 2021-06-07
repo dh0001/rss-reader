@@ -21,8 +21,8 @@ class ArticleFilter(qtw.QWidget):
     def __init__(self, fm: FeedManager):
         super().__init__()
 
-        self.layout = qtw.QVBoxLayout()
-        self.setLayout(self.layout)
+        layout = qtw.QVBoxLayout()
+        self.setLayout(layout)
 
 
 class ArticleView(qtw.QTreeView):
@@ -45,18 +45,27 @@ class ArticleView(qtw.QTreeView):
         self.article_view_model = ArticleViewModel(self)
 
         self.setModel(self.article_view_model)
-        self.header().setStretchLastSection(False)
-        self.setRootIsDecorated(False)
-        self.setSortingEnabled(True)
+        # self.header().setStretchLastSection(False)
+        # self.setRootIsDecorated(False)
+        # self.setSortingEnabled(True)
         self.selectionModel().selectionChanged.connect(self.selection_changed)
-        self.setAlternatingRowColors(True)
+        # self.setAlternatingRowColors(True)
 
         self.feed_manager.article_updated_event.connect(self.article_view_model.update_article_data)
         self.feed_manager.new_article_event.connect(self.article_view_model.new_article)
 
         self.setContextMenuPolicy(qtc.Qt.CustomContextMenu)
-        self.customContextMenuRequested.connect(self.article_context_menu)
-        self.doubleClicked.connect(self.double_click_event)
+        self.customContextMenuRequested.connect(self.handle_article_context_menu)
+        self.doubleClicked.connect(self.handle_double_click)
+
+        # these settings are what the default settings should be. They will be overwritten when restore is called
+        self.header().setStretchLastSection(False)
+        self.header().setSectionResizeMode(0, qtw.QHeaderView.ResizeMode.Fixed)
+        self.header().setSectionResizeMode(1, qtw.QHeaderView.ResizeMode.Fixed)
+        self.header().setSectionResizeMode(2, qtw.QHeaderView.ResizeMode.ResizeToContents)
+        self.setSortingEnabled(True)
+        self.setRootIsDecorated(False)
+
 
 
     def refresh(self) -> None:
@@ -107,7 +116,7 @@ class ArticleView(qtw.QTreeView):
         self.article_view_model.update_all_data()
 
 
-    def article_context_menu(self, mouse_position) -> None:
+    def handle_article_context_menu(self, mouse_position) -> None:
         """Outputs the context menu for items in the article view."""
         index = self.indexAt(mouse_position)
 
@@ -140,13 +149,38 @@ class ArticleView(qtw.QTreeView):
                 self.article_view_model.update_row_unread_status(index)
 
 
-    def double_click_event(self, index) -> None:
+    def handle_double_click(self, index) -> None:
 
         if index.isValid():
             menu = qtw.QMenu()
             article: Article = index.internalPointer()
 
             apply_action(self.current_feed, article)
+
+
+    def restore(self):
+        # restore state
+        self.header().restoreState(qtc.QByteArray.fromBase64(bytes(settings["article_view_headers"], "utf-8")))
+
+
+    def resizeEvent(self, event):
+        remaining_width = event.size().width() - self.columnWidth(2)
+        self.setColumnWidth(0, round(remaining_width * 2 / 3))
+        self.setColumnWidth(1, round(remaining_width / 3))
+        # self.setColumnWidth(2, round(self.columnWidth(2) * remaining_width / ))
+
+
+    def cleanup(self):
+        # max_width = self.maximumViewportSize().width()
+        # current_width = self.viewport().width()
+
+        # save widths as if there were no scrollbar, since the view starts without one.
+        # if there is a scrollbar, modify widths to be what they would be without it.
+        # if self.viewport().width() < max_width:
+        #     self.setColumnWidth(0, round(self.columnWidth(0) * max_width / current_width))
+        #     self.setColumnWidth(1, round(self.columnWidth(1) * max_width / current_width))
+        #     self.setColumnWidth(2, round(self.columnWidth(2) * max_width / current_width))
+        settings["article_view_headers"] = str(self.header().saveState().toBase64(), 'utf-8')
 
 
 

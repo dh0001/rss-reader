@@ -15,9 +15,9 @@ from settings import settings
 class FeedManager(qtc.QObject):
     """Manages the feed data and provides an interface for getting that data."""
 
-    new_article_event = qtc.Signal(Article)
-    article_updated_event = qtc.Signal(Article)
-    feeds_updated_event = qtc.Signal()
+    new_article_event: qtc.SignalInstance = qtc.Signal(Article)
+    article_updated_event: qtc.SignalInstance = qtc.Signal(Article)
+    feeds_updated_event: qtc.SignalInstance = qtc.Signal()
 
     def __init__(self):
         super().__init__()
@@ -264,7 +264,6 @@ class FeedManager(qtc.QObject):
 
         with open("feeds.json", "w") as feeds_file:
             feeds_file.write(json.dumps(self.feed_cache.children, default=lambda o: {k: v for (k, v) in o.__dict__.items() if k not in unsavable}, indent=4))
-
 
 
     def _get_unread_articles_count(self, feed: Feed) -> int:

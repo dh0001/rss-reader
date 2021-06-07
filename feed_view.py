@@ -36,6 +36,11 @@ class FeedView(qtw.QTreeView):
         self.feed_manager.feeds_updated_event.connect(self.update_all_data)
         self.restore_expand_status()
 
+        # these settings are what the default settings should be. They will be overwritten when restore is called
+        self.header().setStretchLastSection(False)
+        self.header().setSectionResizeMode(0, qtw.QHeaderView.ResizeMode.Fixed)
+        self.header().setSectionResizeMode(1, qtw.QHeaderView.ResizeMode.Fixed)
+
 
     def fire_selected_event(self) -> None:
         """
@@ -253,6 +258,20 @@ class FeedView(qtw.QTreeView):
         self.feed_manager.refresh_feed(feed)
 
 
+    def restore(self):
+        # restore geometry
+        self.header().restoreState(qtc.QByteArray.fromBase64(bytes(settings["feed_view_headers"], "utf-8")))
+
+
+    def resizeEvent(self, event):
+        remaining_width = event.size().width()
+        self.setColumnWidth(0, round(remaining_width * 3 / 4))
+        self.setColumnWidth(1, round(remaining_width / 4))
+
+
+    def cleanup(self):
+        # save headers as they are now, since the view will be the same on restart.
+        settings["feed_view_headers"] = str(self.header().saveState().toBase64(), 'utf-8')
 
 
 class FeedViewModel(qtc.QAbstractItemModel):
@@ -390,7 +409,7 @@ class VerifyDialog(qtw.QDialog):
         layout.addWidget(buttons, 2, 1, 1, 1)
 
         self.error_label = qtw.QLabel("")
-        self.error_label.setMinimumWidth(qtg.QFontMetrics(qtg.QFont()).width("Verify Failed"))
+        self.error_label.setMinimumWidth(qtg.QFontMetrics(qtg.QFont()).horizontalAdvance("Verify Failed"))
         layout.addWidget(self.error_label, 2, 0, 1, 1)
 
         layout.setSizeConstraint(qtw.QLayout.SetFixedSize)

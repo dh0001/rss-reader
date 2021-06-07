@@ -26,23 +26,7 @@ class View(qtw.QMainWindow):
         self.feed_rhs_splitter = qtw.QSplitter(qtc.Qt.Horizontal)
         self.tray_icon = qtw.QSystemTrayIcon()
 
-        self.gui()
-
-
-    def cleanup(self) -> None:
-        """Saves panel states into settings."""
-        settings["geometry"] = str(self.saveGeometry().toBase64(), 'utf-8')
-        settings["splitter1"] = str(self.article_content_splitter.saveState().toBase64(), 'utf-8')
-        settings["splitter2"] = str(self.feed_rhs_splitter.saveState().toBase64(), 'utf-8')
-        settings["article_view_headers"] = str(self.article_view.header().saveState().toBase64(), 'utf-8')
-        settings["feed_view_headers"] = str(self.feed_view.header().saveState().toBase64(), 'utf-8')
-
-
-    def gui(self) -> None:
-        """Starts the GUI.
-
-        Initializes the window, views, and sets up interactions.
-        """
+        # initialize GUI
         self.setWindowTitle('RSS Reader')
         # self.main_window.resize(800, 600)
 
@@ -62,6 +46,7 @@ class View(qtw.QMainWindow):
         hbox.addWidget(self.feed_rhs_splitter)
         root_widget.setLayout(hbox)
 
+        # add menu bar
         menu_bar = self.menuBar().addMenu('Options')
         menu_bar.addAction("Add root feed...").triggered.connect(self.feed_view.prompt_add_feed)
         menu_bar.addAction("Add root folder...").triggered.connect(self.feed_view.prompt_add_folder)
@@ -70,7 +55,8 @@ class View(qtw.QMainWindow):
         menu_bar.addSeparator()
         menu_bar.addAction("Exit").triggered.connect(qtc.QCoreApplication.quit)
 
-        # Designed by https://www.flaticon.com/authors/freepik from www.flaticon.com
+
+        # add tray icon
         self.update_icon()
         tray_menu = qtw.QMenu()
         tray_menu.addAction("Update All Feeds").triggered.connect(self.refresh_all)
@@ -79,19 +65,31 @@ class View(qtw.QMainWindow):
         self.tray_icon.setContextMenu(tray_menu)
         self.tray_icon.show()
 
+
+        # restore geometry in the proper order
+        self.restoreState(qtc.QByteArray.fromBase64(bytes(settings["state"], "utf-8")))
         self.restoreGeometry(qtc.QByteArray.fromBase64(bytes(settings["geometry"], "utf-8")))
         self.article_content_splitter.restoreState(qtc.QByteArray.fromBase64(bytes(settings["splitter1"], "utf-8")))
         self.feed_rhs_splitter.restoreState(qtc.QByteArray.fromBase64(bytes(settings["splitter2"], "utf-8")))
-        self.feed_view.header().restoreState(qtc.QByteArray.fromBase64(bytes(settings["feed_view_headers"], "utf-8")))
-        self.article_view.header().restoreState(qtc.QByteArray.fromBase64(bytes(settings["article_view_headers"], "utf-8")))
+        self.feed_view.restore()
+        self.article_view.restore()
 
-        self.feed_view.header().setSectionResizeMode(qtw.QHeaderView.Interactive)
         self.feed_view.feed_selected_event.connect(self.article_view.select_feed)
         self.article_view.article_selected_event.connect(self.output_content)
         self.tray_icon.activated.connect(self.tray_activated)
         self.feed_manager.feeds_updated_event.connect(self.update_icon)
 
         self.show()
+
+
+    def cleanup(self) -> None:
+        """Saves panel states into settings."""
+        settings["geometry"] = str(self.saveGeometry().toBase64(), 'utf-8')
+        settings["state"] = str(self.saveState().toBase64(), 'utf-8')
+        settings["splitter1"] = str(self.article_content_splitter.saveState().toBase64(), 'utf-8')
+        settings["splitter2"] = str(self.feed_rhs_splitter.saveState().toBase64(), 'utf-8')
+        self.article_view.cleanup()
+        self.feed_view.cleanup()
 
 
     def refresh_all(self) -> None:
@@ -112,6 +110,7 @@ class View(qtw.QMainWindow):
 
         Checks if there are any unread articles, and changes the tray icon accordingly.
         """
+        # Icon designed by https://www.flaticon.com/authors/freepik from www.flaticon.com
         # check if there are any unread articles
         for node in self.feed_manager.feed_cache:
             if type(node) is Feed and not node.ignore_new and node.unread_count > 0:

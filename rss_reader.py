@@ -1,13 +1,13 @@
 import logging
-
-import PySide6.QtWidgets as qtw
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication
 
 import feed_manager
 import view
 
 
 # initialization
-app = qtw.QApplication([])
+app = QApplication([])
 
 logging.basicConfig(filename="log.txt", filemode="a", format="%(asctime)s %(levelname)s:%(message)s")
 feed_manager = feed_manager.FeedManager()

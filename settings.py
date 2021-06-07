@@ -2,9 +2,10 @@ import json
 import os.path
 import logging
 
-from shutil import copyfile
+from shutil import copyfile, move
 
 _settings_file = "settings.json"
+_writing_settings_file = "temp_settings"
 _default_settings_file = "defaultsettings.json"
 
 
@@ -40,8 +41,10 @@ class Settings():
     def save_settings(self):
         """Outputs settings to file."""
         value = json.dumps(self.settings, indent=4)
-        with open(_settings_file, "w") as settings_file:
+        with open(_writing_settings_file, "w") as settings_file:
             settings_file.write(value)
+        move(_writing_settings_file, _settings_file)
+        
 
 
 settings = Settings()
