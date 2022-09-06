@@ -96,6 +96,7 @@ class FeedManager(qtc.QObject):
         articles = []
         for row in self._sqlite_connection.execute('SELECT identifier, uri, title, updated, author, content, unread, flag FROM articles WHERE feed_id = ? ORDER BY updated DESC LIMIT 200', [feed_id]):
             data = ArticleData()
+            data.feed_id = feed_id
             data.identifier = row['identifier']
             data.uri = row['uri']
             data.title = row['title']
