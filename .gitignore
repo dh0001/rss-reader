@@ -8,9 +8,10 @@
 !defaultsettings.json
 !update.sql
 !/ui/*.ui
-!.pylintrc
-
-.vscode
+!pylintrc
+!pyproject.toml
+!README.md
+!.vscode/settings.json
 
 
 # Windows image file caches

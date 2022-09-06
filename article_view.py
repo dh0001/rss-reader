@@ -1,6 +1,5 @@
 import operator
 import logging
-from typing import List, Optional, Union
 
 import PySide6.QtWidgets as qtw
 import PySide6.QtCore as qtc
@@ -10,6 +9,7 @@ from feed import Feed, Article, apply_action
 from feed_manager import FeedManager
 from settings import settings
 
+QtModelIndex = qtc.QModelIndex | qtc.QPersistentModelIndex
 
 class ArticleFilter(qtw.QWidget):
     """A view for displaying articles, and a textbox for filtering them.
@@ -39,7 +39,7 @@ class ArticleView(qtw.QTreeView):
         self.feed_manager = fm
 
         # the currently viewed feed
-        self.current_feed: Union[None, Feed] = None
+        self.current_feed: None | Feed = None
 
         # model used by this treeview
         self.article_view_model = ArticleViewModel(self)
@@ -59,10 +59,10 @@ class ArticleView(qtw.QTreeView):
         self.doubleClicked.connect(self.handle_double_click)
 
         # these settings are what the default settings should be. They will be overwritten when restore is called
-        self.header().setStretchLastSection(False)
-        self.header().setSectionResizeMode(0, qtw.QHeaderView.ResizeMode.Fixed)
-        self.header().setSectionResizeMode(1, qtw.QHeaderView.ResizeMode.Fixed)
-        self.header().setSectionResizeMode(2, qtw.QHeaderView.ResizeMode.ResizeToContents)
+        self.header().setStretchLastSection(True)
+        # self.header().setSectionResizeMode(0, qtw.QHeaderView.ResizeMode.Fixed)
+        # self.header().setSectionResizeMode(1, qtw.QHeaderView.ResizeMode.Fixed)
+        # self.header().setSectionResizeMode(2, qtw.QHeaderView.ResizeMode.ResizeToContents)
         self.setSortingEnabled(True)
         self.setRootIsDecorated(False)
 
@@ -77,7 +77,7 @@ class ArticleView(qtw.QTreeView):
         return
 
 
-    def select_feed(self, feed: Union[None, Feed] = None) -> None:
+    def select_feed(self, feed: None | Feed = None) -> None:
         """Changes which feed's articles should be shown in the view.
 
         If feed is unspecified, the view will be blank.
@@ -103,7 +103,7 @@ class ArticleView(qtw.QTreeView):
             self.article_selected_event.emit(article)
 
 
-    def recieve_new_articles(self, articles: List[Article], feed_id: int) -> None:
+    def recieve_new_articles(self, articles: list[Article], feed_id: int) -> None:
         """Recieves new article data from the feed manager and adds them to the views.
 
         Only adds articles which are the same as the currently highlighted feed
@@ -116,7 +116,7 @@ class ArticleView(qtw.QTreeView):
         self.article_view_model.update_all_data()
 
 
-    def handle_article_context_menu(self, mouse_position) -> None:
+    def handle_article_context_menu(self, mouse_position: qtc.QPoint) -> None:
         """Outputs the context menu for items in the article view."""
         index = self.indexAt(mouse_position)
 
@@ -149,21 +149,23 @@ class ArticleView(qtw.QTreeView):
                 self.article_view_model.update_row_unread_status(index)
 
 
-    def handle_double_click(self, index) -> None:
+    def handle_double_click(self, index: qtc.QModelIndex) -> None:
 
         if index.isValid():
-            menu = qtw.QMenu()
+            # menu = qtw.QMenu()
             article: Article = index.internalPointer()
 
-            apply_action(self.current_feed, article)
+            if self.current_feed:
+                apply_action(self.current_feed, article)
 
 
     def restore(self):
         # restore state
-        self.header().restoreState(qtc.QByteArray.fromBase64(bytes(settings["article_view_headers"], "utf-8")))
+        if settings.article_view_headers != "":
+            self.header().restoreState(qtc.QByteArray.fromBase64(bytes(settings.article_view_headers, "utf-8")))
 
 
-    def resizeEvent(self, event):
+    def resizeEvent(self, event: qtg.QResizeEvent):
         remaining_width = event.size().width() - self.columnWidth(2)
         self.setColumnWidth(0, round(remaining_width * 2 / 3))
         self.setColumnWidth(1, round(remaining_width / 3))
@@ -180,7 +182,7 @@ class ArticleView(qtw.QTreeView):
         #     self.setColumnWidth(0, round(self.columnWidth(0) * max_width / current_width))
         #     self.setColumnWidth(1, round(self.columnWidth(1) * max_width / current_width))
         #     self.setColumnWidth(2, round(self.columnWidth(2) * max_width / current_width))
-        settings["article_view_headers"] = str(self.header().saveState().toBase64(), 'utf-8')
+        settings.article_view_headers = str(self.header().saveState().toBase64(), 'utf-8')
 
 
 
@@ -195,30 +197,30 @@ class ArticleViewModel(qtc.QAbstractItemModel):
         2: "Updated"
     }
 
-    def __init__(self, view):
+    def __init__(self, view: ArticleView):
         qtc.QAbstractItemModel.__init__(self)
-        self.articles: List[Article] = []
+        self.articles: list[Article] = []
         self.view = view
 
 
-    def rowCount(self, index: qtc.QModelIndex) -> int:
+    def rowCount(self, parent: QtModelIndex = qtc.QModelIndex()) -> int:
         """Returns the number of rows."""
         # so index points to an article
-        if index.isValid():
+        if parent.isValid():
             return 0
 
         # must be the root index
         return len(self.articles)
 
 
-    def index(self, row, column, parent_index=qtc.QModelIndex()):
+    def index(self, row: int, column: int, parent: QtModelIndex = qtc.QModelIndex()):
         """Returns QModelIndex for given row/column."""
-        if not self.hasIndex(row, column, parent_index):
+        if not self.hasIndex(row, column, parent):
             return qtc.QModelIndex()
         return self.createIndex(row, column, self.articles[row])
 
 
-    def parent(self, _in_index):
+    def parent(self, _):
         """Returns parent of a node.
 
         Articles do not have children so returns an invalid index.
@@ -226,7 +228,7 @@ class ArticleViewModel(qtc.QAbstractItemModel):
         return qtc.QModelIndex()
 
 
-    def columnCount(self, _in_index=None):
+    def columnCount(self, parent: QtModelIndex = qtc.QModelIndex()):
         """Returns the number of columns in the model.
 
         ArticleModel only has 3 columns, title, author, and last updated.
@@ -234,53 +236,54 @@ class ArticleViewModel(qtc.QAbstractItemModel):
         return 3
 
 
-    def data(self, index, role):
+    def data(self, index: QtModelIndex, role: int = 0):
         """Returns data about an index."""
         if not index.isValid():
             return None
 
+        article: Article = index.internalPointer()
         if role in (qtc.Qt.DisplayRole, qtc.Qt.ToolTipRole):
             if index.column() == 0:
-                return index.internalPointer().title
+                return article.title
             if index.column() == 1:
-                return index.internalPointer().author
+                return article.author
             if index.column() == 2:
-                return index.internalPointer().updated.astimezone().strftime('%a %b %d, %Y %I:%M %p')
+                return article.updated.astimezone().strftime('%a %b %d, %Y %I:%M %p')
 
         elif role == qtc.Qt.FontRole:
             font = qtg.QFont()
-            font.setPointSize(settings["font_size"])
-            if index.internalPointer().unread is True:
+            font.setPointSize(settings.font_size)
+            if article.unread is True:
                 font.setBold(True)
             return font
 
         elif role == qtc.Qt.ForegroundRole:
-            if index.internalPointer().flag is True:
+            if article.flag is True:
                 return qtg.QColor(qtc.Qt.red)
 
         return None
 
 
-    def headerData(self, section, orientation, role=qtc.Qt.DisplayRole):
+    def headerData(self, section: int, orientation: qtc.Qt.Orientation, role: int=qtc.Qt.DisplayRole):
         if role == qtc.Qt.DisplayRole:
             if orientation == qtc.Qt.Horizontal:
                 return self.definedrows.get(section, None)
         return None
 
 
-    def sort(self, column, ascending=qtc.Qt.AscendingOrder):
+    def sort(self, column: int, order: qtc.Qt.SortOrder = qtc.Qt.AscendingOrder):
         self.beginResetModel()
-        ascending = ascending is qtc.Qt.AscendingOrder
+        reverse = order == qtc.Qt.AscendingOrder
         if column == 0:
-            self.articles.sort(key=lambda e: e.title, reverse=ascending)
+            self.articles.sort(key=lambda e: e.title, reverse=reverse)
         elif column == 1:
-            self.articles.sort(key=lambda e: e.author, reverse=ascending)
+            self.articles.sort(key=lambda e: e.author, reverse=reverse)
         elif column == 2:
-            self.articles.sort(key=lambda e: e.updated, reverse=ascending)
+            self.articles.sort(key=lambda e: e.updated, reverse=reverse)
         self.endResetModel()
 
 
-    def set_articles(self, articles: List[Article]) -> None:
+    def set_articles(self, articles: list[Article]) -> None:
         """Resets whats in the display with new articles.
 
         Causes unselecting.
@@ -289,19 +292,19 @@ class ArticleViewModel(qtc.QAbstractItemModel):
         self.sort(self.view.header().sortIndicatorSection(), self.view.header().sortIndicatorOrder())
 
 
-    def update_row_unread_status(self, index):
+    def update_row_unread_status(self, index: qtc.QModelIndex):
         """Emits a change in the unread status for a row in the article view."""
         row = index.row()
         self.dataChanged.emit(self.index(row, 0), self.index(row, 0), [qtc.Qt.FontRole])
 
 
-    def update_row_flag_status(self, index):
+    def update_row_flag_status(self, index: qtc.QModelIndex):
         """Emits a change in the flag status for a row in the article view."""
         row = index.row()
         self.dataChanged.emit(self.index(row, 0), self.index(row, 0), [qtc.Qt.ForegroundRole])
 
 
-    def update_article_data(self, article):
+    def update_article_data(self, article: Article):
         """Updates an existing article in the model with data."""
         if self.view.current_feed is not None and self.view.current_feed.db_id == article.feed_id:
             i = next((i for i, v in enumerate(self.articles) if v.identifier == article.identifier), None)
@@ -312,7 +315,7 @@ class ArticleViewModel(qtc.QAbstractItemModel):
                 logging.error("Article was updated in manager, but not already in view")
 
 
-    def new_article(self, article):
+    def new_article(self, article: Article):
         """Updates the model with a new article."""
         if self.view.current_feed is not None and self.view.current_feed.db_id == article.feed_id:
             if self.view.header().sortIndicatorOrder() == qtc.Qt.AscendingOrder:

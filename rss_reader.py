@@ -1,5 +1,4 @@
 import logging
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 import feed_manager

@@ -1,0 +1,9 @@
+[tool.autopep8]
+max_line_length = 99999
+ignore = "E303"  # or ["E501", "W6"]
+aggressive = 3
+
+[tool.pyright]
+reportUnknownMemberType = false
+reportUnknownVariableType = false
+reportUnknownArgumentType = false

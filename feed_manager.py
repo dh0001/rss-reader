@@ -1,13 +1,14 @@
+from copy import copy
 import sqlite3
 import json
-import datetime
-from typing import List, Union, Dict
+from datetime import datetime, timedelta, timezone
+from typing import Any, List, Dict
 import os
 import logging
 
 from PySide6 import QtCore as qtc
 
-from feed import Feed, Article, Folder, get_feed
+from feed import ArticleData, Feed, Article, FeedData, Folder, get_feed
 from feed_updater import UpdateThread
 from settings import settings
 
@@ -15,41 +16,72 @@ from settings import settings
 class FeedManager(qtc.QObject):
     """Manages the feed data and provides an interface for getting that data."""
 
-    new_article_event: qtc.SignalInstance = qtc.Signal(Article)
-    article_updated_event: qtc.SignalInstance = qtc.Signal(Article)
-    feeds_updated_event: qtc.SignalInstance = qtc.Signal()
+    new_article_event: qtc.Signal = qtc.Signal(Article)
+    article_updated_event: qtc.Signal = qtc.Signal(Article)
+    feeds_updated_event: qtc.Signal = qtc.Signal()
 
     def __init__(self):
         super().__init__()
 
-        # feed_cache is a folder, and the 'root' folder for the feed manager.
-        # Currently done like this for easier setting of parents, adding to folder, and refresh.
-        self.feed_cache = self._load_feeds()
+        def traverse_dict_output_folder(node: dict[str, Any], parent: Folder):
+            # its a folder
+            if "children" in node:
+                folder = Folder(node["title"], parent)
+                for child in node["children"]:
+                    folder.children.append(traverse_dict_output_folder(child, folder))
+                return folder
+            # its a feed
+            else:
+                feed = Feed(parent)
+                
+                if node["updated"] == None:
+                    node["updated"] = datetime.fromtimestamp(0)
+                else:
+                    node["updated"] = datetime.fromisoformat(node["updated"])
+                
+                feed.update(node)
+                return feed
 
-        self._connection = sqlite3.connect(settings["db_file"])
-        self._connection.row_factory = sqlite3.Row
+        if not os.path.exists("feeds.json"):
+            with open("feeds.json", "w") as _new_file:
+                _new_file.write("[]")
+
+        with open("feeds.json", "rb") as _feeds_file:
+            contents = _feeds_file.read().decode("utf-8")
+        
+        self.feed_cache = Folder("root")
+        """feed_cache is a folder, and the 'root' folder for the feed manager.
+        Currently done like this for easier setting of parents, adding to folder, and refresh."""
+
+        feed_dict: list[dict[str, Any]] = json.loads(contents)
+        for item in feed_dict:
+            self.feed_cache.children.append(traverse_dict_output_folder(item, self.feed_cache))
+
+
+        self._sqlite_connection = sqlite3.connect(settings.db_file)
+        self._sqlite_connection.row_factory = sqlite3.Row
 
         # create and start scheduler thread
-        self._scheduler_thread = UpdateThread(self.feed_cache, settings)
+        self._update_thread = UpdateThread(self.feed_cache, settings)
 
         self._initialize_database()
 
-        self._scheduler_thread.data_downloaded_event.connect(self._handle_data_downloaded)
-        self._scheduler_thread.start()
+        self._update_thread.data_downloaded_event.connect(self._handle_data_downloaded)
+        self._update_thread.start()
 
-        if settings["startup_update"] is True:
+        if settings.startup_update is True:
             self.refresh_all()
 
 
     def cleanup(self) -> None:
         """Closes db connection and exits threads gracefully."""
 
-        self._scheduler_thread.requestInterruption()
-        self._scheduler_thread.schedule_update_event.set()
-        if self._scheduler_thread.wait(0.5) is False:
+        self._update_thread.requestInterruption()
+        self._update_thread.schedule_update_event.set()
+        if self._update_thread.wait(1) is False:
             logging.info("not enough time to stop thread 0.5")
-        # self._save_feeds()
-        self._connection.close()
+        self._save_feeds()
+        self._sqlite_connection.close()
 
 
     def get_articles(self, feed_id: int) -> List[Article]:
@@ -62,38 +94,36 @@ class FeedManager(qtc.QObject):
             A list of articles with the corresponding feed_id.
         """
         articles = []
-        for row in self._connection.execute('SELECT identifier, uri, title, updated, author, content, unread, flag FROM articles WHERE feed_id = ?', [feed_id]):
-            article = Article()
-            article.feed_id = feed_id
-            article.identifier = row['identifier']
-            article.uri = row['uri']
-            article.title = row['title']
-            article.updated = datetime.datetime.fromtimestamp(row['updated'], datetime.timezone.utc)
-            article.author = row['author']
-            article.content = row['content']
-            article.unread = bool(row['unread'])
-            article.flag = bool(row['flag'])
-            articles.append(article)
+        for row in self._sqlite_connection.execute('SELECT identifier, uri, title, updated, author, content, unread, flag FROM articles WHERE feed_id = ? ORDER BY updated DESC LIMIT 200', [feed_id]):
+            data = ArticleData()
+            data.identifier = row['identifier']
+            data.uri = row['uri']
+            data.title = row['title']
+            data.updated = datetime.fromtimestamp(row['updated'], timezone.utc)
+            data.author = row['author']
+            data.content = row['content']
+            data.unread = bool(row['unread'])
+            data.flag = bool(row['flag'])
+            articles.append(Article(data))
         return articles
 
 
-    def add_feed(self, location: str, folder: Folder) -> None:
-        """Verify that a feed is valid, and adds it to the folder."""
+    def add_feed(self, location: str, folder: Folder, analyzer: str) -> None:
+        """Adds a feed to the folder."""
 
-        feed, articles = get_feed(location, "rss")
+        feeddata, articledata = get_feed(location, analyzer)
 
-        feed.uri = location
-        feed.parent_folder = folder
-        feed.template = "rss"
-
-        # feed_counter should always be free
-        feed.db_id = settings["feed_counter"]
-        settings["feed_counter"] += 1
+        feeddata.db_id = settings.feed_counter
+        feeddata.uri = location
+        feeddata.template = analyzer
+        feed = Feed(folder, feeddata)
 
         folder.children.append(feed)
-
-        self._process_new_articles(feed, articles)
         self.feeds_updated_event.emit()
+
+        self._add_articles_to_db(feed, articledata)
+
+        settings.feed_counter += 1
         self._save_feeds()
 
 
@@ -103,7 +133,7 @@ class FeedManager(qtc.QObject):
         Removes a feed with passed feed_id, and its entry from the refresh schedule.
         """
         if feed.refresh_rate is not None:
-            self._scheduler_thread.remove_feed(feed)
+            self._update_thread.remove_feed(feed)
 
         assert feed.parent_folder.children.index(feed) != -1, "Folder was not found when trying to delete it!"
         del feed.parent_folder.children[feed.parent_folder.children.index(feed)]
@@ -112,9 +142,7 @@ class FeedManager(qtc.QObject):
 
     def add_folder(self, folder_name: str, folder: Folder) -> None:
         """Adds a folder."""
-        new_folder = Folder()
-        new_folder.title = folder_name
-        new_folder.parent_folder = folder
+        new_folder = Folder(folder_name, folder)
         folder.children.append(new_folder)
         self._save_feeds()
 
@@ -122,17 +150,18 @@ class FeedManager(qtc.QObject):
     def delete_folder(self, folder: Folder) -> None:
         """Deletes a folder."""
 
-        def _delete_feeds_in_folder(folder: Folder) -> None:
+        def delete_feeds_in_folder(folder: Folder) -> None:
             """Deletes all feeds in a folder recursively."""
             for child in folder.children:
                 if type(child) is Feed:
                     self.delete_feed(child)
-                else:
-                    _delete_feeds_in_folder(child)
+                elif type(child) is Folder: # TODO: check if narrowing works now
+                    delete_feeds_in_folder(child)
 
-        _delete_feeds_in_folder(folder)
-        assert folder.parent_folder.children.index(folder) != -1, "Folder was not found when trying to delete it!"
-        del folder.parent_folder.children[folder.parent_folder.children.index(folder)]
+        delete_feeds_in_folder(folder)
+        if folder.parent_folder:
+            folder.parent_folder.children.remove(folder)
+
         self._save_feeds()
 
 
@@ -144,12 +173,12 @@ class FeedManager(qtc.QObject):
 
     def refresh_all(self) -> None:
         """Schedules all feeds to be refreshed."""
-        self._scheduler_thread.force_refresh_folder(self.feed_cache)
+        self._update_thread.force_refresh_folder(self.feed_cache)
 
 
     def refresh_feed(self, feed: Feed) -> None:
         """Schedules a feed to be refreshed."""
-        self._scheduler_thread.force_refresh_feed(feed)
+        self._update_thread.force_refresh_feed(feed)
 
 
     def set_article_unread_status(self, feed: Feed, article: Article, status: bool) -> None:
@@ -160,8 +189,8 @@ class FeedManager(qtc.QObject):
         """
         if article.unread != status:
             article.unread = status
-            with self._connection:
-                self._connection.execute('''UPDATE articles SET unread = ? WHERE identifier = ? and feed_id = ?''', [status, article.identifier, article.feed_id])
+            with self._sqlite_connection:
+                self._sqlite_connection.execute('''UPDATE articles SET unread = ? WHERE identifier = ? and feed_id = ?''', [status, article.identifier, article.feed_id])
             feed.unread_count = self._get_unread_articles_count(feed)
             self.feeds_updated_event.emit()
 
@@ -169,46 +198,33 @@ class FeedManager(qtc.QObject):
     def toggle_article_flag(self, article: Article) -> None:
         """Inverts flag status on an article."""
         article.flag = not article.flag
-        with self._connection:
-            self._connection.execute('''UPDATE articles SET flag = ? WHERE identifier = ? and feed_id = ?''', [article.flag, article.identifier, article.feed_id])
+        with self._sqlite_connection:
+            self._sqlite_connection.execute('''UPDATE articles SET flag = ? WHERE identifier = ? and feed_id = ?''', [article.flag, article.identifier, article.feed_id])
 
 
     def set_default_refresh_rate(self, rate: int) -> None:
         """Sets the default refresh rate for feeds and resets the scheduled default refresh."""
-        self._scheduler_thread.update_global_refresh_rate(rate)
+        self._update_thread.update_global_refresh_rate(rate)
 
 
-    def set_feed_attributes(self, feed: Feed, user_title: Union[str, None], refresh_rate: Union[int, None], delete_time: Union[int, None], ignore_new_articles: bool) -> None:
+    def update_feed(self, feed: Feed, data: FeedData) -> None:
         """Sets properties for all feeds.
 
         Will check if value is same as previous value, and will not update if that is the case.
         Saves feed changes to disk."""
-        if feed.refresh_rate != refresh_rate:
-            self._scheduler_thread.update_refresh_rate(feed, rate)
+        old_refresh_rate = feed.refresh_rate
 
-        if feed.user_title != user_title:
-            feed.user_title = user_title
-
-        feed.delete_time = delete_time
-        feed.ignore_new = ignore_new_articles
+        feed.update(data)
+        if old_refresh_rate != data.refresh_rate:
+            self._update_thread.update_refresh_rate(feed, data.refresh_rate)
         self._save_feeds()
         self.feeds_updated_event.emit()
 
 
-    @staticmethod
-    def verify_feed_url(url: str) -> bool:
-        """Verifies if a url points to a proper feed."""
-        try:
-            get_feed(url, "rss")
-            return True
-        except Exception:
-            return False
-
-
     def _initialize_database(self) -> None:
         """Creates all the tables used."""
-        with self._connection:
-            self._connection.execute('''CREATE TABLE IF NOT EXISTS articles (
+        with self._sqlite_connection:
+            self._sqlite_connection.execute('''CREATE TABLE IF NOT EXISTS articles (
                 feed_id INTEGER,
                 identifier TEXT,
                 uri TEXT,
@@ -220,93 +236,55 @@ class FeedManager(qtc.QObject):
                 flag BOOLEAN)''')
 
 
-    @staticmethod
-    def _load_feeds():
-        """Load feeds from disk."""
-
-        def set_parents(tree):
-            """recursively set parents"""
-            for child in tree.children:
-                child.parent_folder = tree
-                if type(child) is Folder:
-                    set_parents(child)
-
-
-        def _dict_to_feed_or_folder(node):
-            if "children" in node:
-                folder = Folder()
-                folder.__dict__ = node
-                return folder
-
-            if "title" in node:
-                feed = Feed()
-                feed.__dict__ = node
-                return feed
-            return node
-
-        if not os.path.exists("feeds.json"):
-            with open("feeds.json", "w") as new_file:
-                new_file.write("[]")
-
-        folder = Folder()
-        with open("feeds.json", "rb") as feeds_file:
-            contents = feeds_file.read().decode("utf-8")
-            folder.children = json.loads(contents, object_hook=_dict_to_feed_or_folder)
-
-        set_parents(folder)
-        return folder
-
-
     def _save_feeds(self):
         """Saves the feeds to disk."""
 
-        unsavable = ["parent_folder"]
+        def default(o: Feed | Folder):
+            if type(o) is Feed:
+                feed = copy(o)
+                data = vars(feed)
+                data["updated"] = feed.updated.isoformat()
+                data.pop("parent_folder")
+                return data
+            elif type(o) is Folder:
+                folder = copy(o)
+                data = vars(folder)
+                data.pop("parent_folder")
+                return data
 
+        content = json.dumps(self.feed_cache.children, default=default, indent=4)
         with open("feeds.json", "w") as feeds_file:
-            feeds_file.write(json.dumps(self.feed_cache.children, default=lambda o: {k: v for (k, v) in o.__dict__.items() if k not in unsavable}, indent=4))
+            feeds_file.write(content)
 
 
     def _get_unread_articles_count(self, feed: Feed) -> int:
         """Return the number of unread articles for a feed."""
-        with self._connection:
-            return self._connection.execute('''SELECT count(*) FROM articles WHERE unread = 1 AND feed_id = ?''', [feed.db_id]).fetchone()[0]
+        with self._sqlite_connection:
+            return self._sqlite_connection.execute('''SELECT count(*) FROM articles WHERE unread = 1 AND feed_id = ?''', [feed.db_id]).fetchone()[0]
 
 
-    def _get_article_identifiers(self, feed_id: int) -> Dict[str, datetime.datetime]:
+    def _get_article_identifiers(self, feed_id: int) -> Dict[str, datetime]:
         """Returns a dict containing all the identifiers of all articles for a feed."""
         articles = {}
-        with self._connection:
-            for article in self._connection.execute('''SELECT identifier, updated FROM articles WHERE feed_id = ?''', [feed_id]):
-                articles[article['identifier']] = datetime.datetime.fromtimestamp(article['updated'], datetime.timezone.utc)
+        with self._sqlite_connection:
+            for article in self._sqlite_connection.execute('''SELECT identifier, updated FROM articles WHERE feed_id = ?''', [feed_id]):
+                articles[article['identifier']] = datetime.fromtimestamp(article['updated'], timezone.utc)
         return articles
 
 
-    def _add_articles_to_database(self, articles: List[Article], feed_id: int) -> None:
-        """Add a list of articles to the database.
-
-        All articles will be marked as unread."""
-        with self._connection:
-            for article in articles:
-                self._connection.execute(
-                    '''INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                    [feed_id, article.identifier, article.uri, article.title, article.updated.timestamp(), article.author, article.content, True, False])
-
-
-    def _handle_data_downloaded(self, feed: Feed, new_feed_data: Feed, articles: List[Article]):
+    def _handle_data_downloaded(self, feed: Feed, new_feed_data: FeedData, articles: List[ArticleData]):
         """Recieves updated or new feed data."""
-        # update feed
         feed.update(new_feed_data)
 
-        # update articles
-        self._process_new_articles(feed, articles)
+        self._add_articles_to_db(feed, articles)
         self.feeds_updated_event.emit()
 
 
-    def _update_articles(self, articles):
+    def _update_articles(self, articles: list[Article]):
         """Updates multiple existing articles in the database."""
-        with self._connection:
+        with self._sqlite_connection:
             for article in articles:
-                self._connection.execute(
+                self._sqlite_connection.execute(
                     '''
                     UPDATE articles
                     SET uri = ?,
@@ -320,7 +298,7 @@ class FeedManager(qtc.QObject):
                      article.identifier])
 
 
-    def _process_new_articles(self, feed, articles):
+    def _add_articles_to_db(self, feed: Feed, articles: list[ArticleData]):
         """Processes newly created articles for the feed, and adds them to the database.
 
         Checks for and delete old articles in the list, and delete old aricles in the database.
@@ -328,21 +306,26 @@ class FeedManager(qtc.QObject):
         Will also update the unread count on the feed."""
 
         if feed.delete_time is not None:
-            limit = feed.delete_time
+            delete_time = feed.delete_time
         else:
-            limit = settings["default_delete_time"]
+            delete_time = settings.default_delete_time
 
-        if limit == 0:
+        if delete_time == 0:
             date_cutoff = None
         else:
-            date_cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=limit)
-            self._delete_old_articles(date_cutoff, feed.db_id)
+            date_cutoff = datetime.now(timezone.utc) - timedelta(minutes=delete_time)
+            # Deletes articles in the database which are not after the passed time_limit.
+            with self._sqlite_connection:
+                self._sqlite_connection.execute('''DELETE from articles WHERE updated < ? and feed_id = ?''', [date_cutoff.timestamp(), feed.db_id])
+
 
         known_ids = self._get_article_identifiers(feed.db_id)
 
         new_articles = []
         updated_articles = []
-        for article in articles:
+        for articledata in articles:
+
+            article = Article(articledata)
 
             if date_cutoff is not None and article.updated < date_cutoff:
                 continue
@@ -357,12 +340,12 @@ class FeedManager(qtc.QObject):
 
         self._update_articles(updated_articles)
         map(self.article_updated_event.emit, updated_articles)
-        self._add_articles_to_database(new_articles, feed.db_id)
+
+        # add the articles to the database.
+        with self._sqlite_connection:
+            for article in new_articles:
+                self._sqlite_connection.execute(
+                    '''INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    [feed.db_id, article.identifier, article.uri, article.title, article.updated.timestamp(), article.author, article.content, True, False])
 
         feed.unread_count = self._get_unread_articles_count(feed)
-
-
-    def _delete_old_articles(self, cutoff_time: datetime.datetime, feed_id: int) -> None:
-        """Deletes articles in the database which are not after the passed time_limit."""
-        with self._connection:
-            self._connection.execute('''DELETE from articles WHERE updated < ? and feed_id = ?''', [cutoff_time.timestamp(), feed_id])

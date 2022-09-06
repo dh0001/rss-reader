@@ -1,15 +1,15 @@
 {
     "db_file": "articles.db",
     "refresh_time": 600,
-    "default_delete_time": 4320,
+    "default_delete_time": 0,
     "global_refresh_rate": 0.25,
     "feed_counter": 0,
     "font_size": 10,
     "startup_update": true,
-    "geometry": "AdnQywADAAAAAAGHAAAAfgAABkgAAAOEAAABiAAAAJ0AAAZHAAADgwAAAAAAAAAAB4AAAAGIAAAAnQAABkcAAAOD",
-    "splitter1": "AAAA/wAAAAEAAAACAAAAwAAAAMAB/////wEAAAACAA==",
-    "splitter2": "AAAA/wAAAAEAAAACAAABbQAAAzwB/////wEAAAABAA==",
-    "article_view_headers": "AAAA/wAAAAAAAAABAAAAAAAAAAIBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOSAAAAAwEBAAAAAAAAAAAAAAEAAABk/////wAAAIEAAAAAAAAAAwAAAdEAAAABAAAAAgAAAOkAAAABAAAAAgAAANgAAAABAAAAAwAAA+gAAAAAZAAAAAA=",
-    "feed_view_headers": "AAAA/wAAAAAAAAABAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFgAAAAAgEAAAAAAAAAAAAAAAAAAABk/////wAAAIEAAAAAAAAAAgAAAQgAAAABAAAAAgAAAFgAAAABAAAAAgAAA+gAAAAAZAAAAAA=",
-    "state": "AAAA/wAAAAD9AAAAAAAABSQAAAMQAAAABAAAAAQAAAAIAAAACPwAAAAA"
+    "geometry": "",
+    "splitter1": "",
+    "splitter2": "",
+    "article_view_headers": "",
+    "feed_view_headers": "",
+    "state": ""
 }

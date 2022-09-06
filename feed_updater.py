@@ -1,13 +1,21 @@
+from heapq import heapify, heappop, heappush
 import time
 import threading
 import queue
 import logging
-from typing import Union
+from typing import NamedTuple, Union
 
 from PySide6 import QtCore as qtc
-from sortedcontainers import SortedKeyList
 
 from feed import Feed, Folder, get_feed
+from settings import Settings
+
+
+class Entry(NamedTuple):
+    time: float
+    scheduled: Feed | None  # a value of None indicates global refresh    
+
+# Entry = NamedTuple('Entry', ['scheduled', 'time'])
 
 
 class UpdateThread(qtc.QThread):
@@ -26,35 +34,24 @@ class UpdateThread(qtc.QThread):
     download_error_event = qtc.Signal()
 
 
-    class Entry():
-        """Entries in the scheduler.
-
-        Holds a feed, and the time it should be refreshed.
-        A value of `None` for feed indicates it the entry for global refresh.
-        """
-        __slots__ = 'scheduled', 'time'
-
-        def __init__(self, scheduled: Union[Feed, None], t: float):
-            self.scheduled = scheduled  # a value of None indicates global refresh
-            self.time = t
-
-
-    def __init__(self, feeds: Folder, settings):
+    def __init__(self, feeds: Folder, settings: Settings):
         qtc.QThread.__init__(self)
 
-        self.schedule = SortedKeyList(key=lambda x: x.time)
+        self.schedule: list[Entry] = []
         self.schedule_update_event = threading.Event()
         self.feeds = feeds
         self.settings = settings
         self.schedule_lock = threading.Lock()
-        self.queue: queue.SimpleQueue = queue.SimpleQueue()
+        self.queue: queue.SimpleQueue[Feed] = queue.SimpleQueue()
 
         for feed in self.feeds:
             if feed.refresh_rate is not None and feed.refresh_rate != 0:
-                self.schedule.add(UpdateThread.Entry(feed, time.time() + feed.refresh_rate))
+                self.schedule.append(Entry(time.time() + feed.refresh_rate, feed))
 
         # entry for global refresh
-        self.schedule.add(UpdateThread.Entry(None, self.settings["refresh_time"] + time.time()))
+        self.schedule.append(Entry(self.settings.refresh_time + time.time(), None))
+
+        heapify(self.schedule)
 
 
     def run(self):
@@ -64,21 +61,21 @@ class UpdateThread(qtc.QThread):
 
             with self.schedule_lock:
 
+                
                 if self.schedule[0].time <= time.time():
 
                     if type(self.schedule[0].scheduled) is Feed:
+                        heappop(self.schedule)
                         feed = self.schedule[0].scheduled
                         self.queue.put(feed)
-                        assert feed.refresh_rate != 0
                         if feed.refresh_rate is not None and feed.refresh_rate != 0:
-                            self.schedule.add(UpdateThread.Entry(feed, feed.refresh_rate + time.time()))
+                            heappush(self.schedule, Entry(feed.refresh_rate + time.time(), feed))
 
                     else:
                         # global refresh
                         self.queue_default_refresh(self.feeds)
-                        assert self.settings["refresh_time"] != 0
-                        if self.settings["refresh_time"] != 0:
-                            self.schedule.add(UpdateThread.Entry(None, self.settings["refresh_time"] + time.time()))
+                        if self.settings.refresh_time != 0:
+                            heappush(self.schedule, Entry(self.settings.refresh_time + time.time(), None))
 
                     del self.schedule[0]
 
@@ -92,7 +89,7 @@ class UpdateThread(qtc.QThread):
             self.schedule_update_event.clear()
 
 
-    def queue_default_refresh(self, folder):
+    def queue_default_refresh(self, folder: Folder | Feed):
         """Adds all feeds which refresh at the default rate to the queue."""
         for node in folder:
             if type(node) is Folder:
@@ -114,13 +111,13 @@ class UpdateThread(qtc.QThread):
         except Exception as exc:
             logging.error(f"Error parsing feed {feed.uri}, {exc}")
 
-        time.sleep(self.settings["global_refresh_rate"])
+        time.sleep(self.settings.global_refresh_rate)
 
 
-    def force_refresh_folder(self, folder):
+    def force_refresh_folder(self, folder: Folder):
         """Adds all feeds in a folder to the update queue recursively."""
 
-        def folder_refresh(folder):
+        def folder_refresh(folder: Folder):
             for node in folder:
                 if type(node) is Folder:
                     folder_refresh(node)
@@ -131,7 +128,7 @@ class UpdateThread(qtc.QThread):
         self.schedule_update_event.set()
 
 
-    def force_refresh_feed(self, feed):
+    def force_refresh_feed(self, feed: Feed):
         """Adds a feed to the update queue."""
         self.queue.put(feed)
         self.schedule_update_event.set()
@@ -144,13 +141,13 @@ class UpdateThread(qtc.QThread):
         """
         with self.schedule_lock:
             # delete the default refresh scheduler entry
-            if self.settings["refresh_time"] != 0:
+            if self.settings.refresh_time != 0:
                 i = next(i for (i, v) in enumerate(self.schedule) if v.scheduled is None)
                 del self.schedule[i]
 
-            self.settings["refresh_time"] = rate
-            if self.settings["refresh_time"] != 0:
-                self.schedule.add(UpdateThread.Entry(None, self.settings["refresh_time"] + time.time()))
+            self.settings.refresh_time = rate
+            if self.settings.refresh_time != 0:
+                heappush(self.schedule, Entry(self.settings.refresh_time + time.time(), None))
 
         self.schedule_update_event.set()
 
@@ -167,7 +164,7 @@ class UpdateThread(qtc.QThread):
 
             feed.refresh_rate = rate
             if feed.refresh_rate is not None and feed.refresh_rate != 0:
-                self.schedule.add(UpdateThread.Entry(feed, time.time() + feed.refresh_rate))
+                heappush(self.schedule, Entry(time.time() + feed.refresh_rate, feed))
 
         self.schedule_update_event.set()
 

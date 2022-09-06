@@ -3,7 +3,7 @@ import PySide6.QtCore as qtc
 import PySide6.QtGui as qtg
 import PySide6.QtUiTools as qut
 
-from feed import Feed, Article
+from feed import Feed, Article, Folder
 import feed_manager
 from settings import settings
 from feed_view import FeedView
@@ -67,10 +67,14 @@ class View(qtw.QMainWindow):
 
 
         # restore geometry in the proper order
-        self.restoreState(qtc.QByteArray.fromBase64(bytes(settings["state"], "utf-8")))
-        self.restoreGeometry(qtc.QByteArray.fromBase64(bytes(settings["geometry"], "utf-8")))
-        self.article_content_splitter.restoreState(qtc.QByteArray.fromBase64(bytes(settings["splitter1"], "utf-8")))
-        self.feed_rhs_splitter.restoreState(qtc.QByteArray.fromBase64(bytes(settings["splitter2"], "utf-8")))
+        if settings.state != "":
+            self.restoreState(qtc.QByteArray.fromBase64(bytes(settings.state, "utf-8")))
+        if settings.geometry != "":
+            self.restoreGeometry(qtc.QByteArray.fromBase64(bytes(settings.geometry, "utf-8")))
+        if settings.splitter1 != "":
+            self.article_content_splitter.restoreState(qtc.QByteArray.fromBase64(bytes(settings.splitter1, "utf-8")))
+        if settings.splitter2 != "":
+            self.feed_rhs_splitter.restoreState(qtc.QByteArray.fromBase64(bytes(settings.splitter2, "utf-8")))
         self.feed_view.restore()
         self.article_view.restore()
 
@@ -84,10 +88,10 @@ class View(qtw.QMainWindow):
 
     def cleanup(self) -> None:
         """Saves panel states into settings."""
-        settings["geometry"] = str(self.saveGeometry().toBase64(), 'utf-8')
-        settings["state"] = str(self.saveState().toBase64(), 'utf-8')
-        settings["splitter1"] = str(self.article_content_splitter.saveState().toBase64(), 'utf-8')
-        settings["splitter2"] = str(self.feed_rhs_splitter.saveState().toBase64(), 'utf-8')
+        settings.geometry = str(self.saveGeometry().toBase64(), 'utf-8')
+        settings.state = str(self.saveState().toBase64(), 'utf-8')
+        settings.splitter1 = str(self.article_content_splitter.saveState().toBase64(), 'utf-8')
+        settings.splitter2 = str(self.feed_rhs_splitter.saveState().toBase64(), 'utf-8')
         self.article_view.cleanup()
         self.feed_view.cleanup()
 
@@ -101,7 +105,7 @@ class View(qtw.QMainWindow):
 
 
 
-    def hideEvent(self, _event):
+    def hideEvent(self, event: qtg.QHideEvent):
         self.hide()
 
 
@@ -120,19 +124,16 @@ class View(qtw.QMainWindow):
         self.tray_icon.setIcon(qtg.QIcon("download.png"))
 
 
-    def get_folder_unread_count(self, folder):
+    def get_folder_unread_count(self, folder: Folder):
         """Returns the total number of unread articles of all feeds in a folder."""
         count = 0
         for node in folder:
-            if type(node) is Feed:
-                count += node.unread_count
-            else:
-                count += self.get_folder_unread_count(node)
+            count += node.unread_count
         return count
 
 
 
-    def tray_activated(self, reason):
+    def tray_activated(self, reason: qtw.QSystemTrayIcon.ActivationReason):
         """Minimizes or maximizes the application to tray depending on if window is visible.
 
         Should only be called by an event."""
@@ -156,39 +157,39 @@ class View(qtw.QMainWindow):
 
         window = qut.QUiLoader().load("ui/settings.ui")
 
-        window.globalRefresh.setValue(settings["refresh_time"])
-        window.globalRefreshDelay.setValue(settings["global_refresh_rate"])
-        window.deleteTime.setValue(settings["default_delete_time"])
-        window.fontSize.setValue(settings["font_size"])
-        window.startupUpdate.setChecked(settings["startup_update"])
+        window.globalRefresh.setValue(settings.refresh_time)
+        window.globalRefreshDelay.setValue(settings.global_refresh_rate)
+        window.deleteTime.setValue(settings.default_delete_time)
+        window.fontSize.setValue(settings.font_size)
+        window.startupUpdate.setChecked(settings.startup_update)
 
         window.setWindowFlags(qtc.Qt.WindowCloseButtonHint | qtc.Qt.WindowTitleHint)
 
         window.show()
         if window.exec() == qtw.QDialog.Accepted:
 
-            if window.globalRefresh.value() != settings["refresh_time"]:
+            if window.globalRefresh.value() != settings.refresh_time:
                 self.feed_manager.set_default_refresh_rate(window.globalRefresh.value())
 
-            if window.globalRefreshDelay.value() != settings["global_refresh_rate"]:
-                settings["global_refresh_rate"] = window.globalRefreshDelay.value()
+            if window.globalRefreshDelay.value() != settings.global_refresh_rate:
+                settings.global_refresh_rate = window.globalRefreshDelay.value()
 
-            if window.deleteTime.value() != settings["default_delete_time"]:
-                settings["default_delete_time"] = window.deleteTime.value()
+            if window.deleteTime.value() != settings.default_delete_time:
+                settings.default_delete_time = window.deleteTime.value()
 
-            if window.fontSize.value() != settings["font_size"]:
-                settings["font_size"] = window.fontSize.value()
+            if window.fontSize.value() != settings.font_size:
+                settings.font_size = window.fontSize.value()
                 self.article_view.update_all_data()
                 self.feed_view.update_all_data()
 
-            if window.startupUpdate.isChecked() != settings["startup_update"]:
-                settings["startup_update"] = window.startupUpdate.isChecked()
+            if window.startupUpdate.isChecked() != settings.startup_update:
+                settings.startup_update = window.startupUpdate.isChecked()
 
 
 class TBrowser(qtw.QTextBrowser):
     """HTML browser with resource fetching disabled."""
 
-    def loadResource(self, _type: int, _url: str):
+    def loadResource(self, type: int, name: str | qtc.QUrl):
         return None
 
     def __init__(self):
