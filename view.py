@@ -118,10 +118,10 @@ class View(qtw.QMainWindow):
         # check if there are any unread articles
         for node in self.feed_manager.feed_cache:
             if type(node) is Feed and not node.ignore_new and node.unread_count > 0:
-                self.tray_icon.setIcon(qtg.QIcon("new.png"))
+                self.tray_icon.setIcon(qtg.QIcon("assets/new.png"))
                 return
 
-        self.tray_icon.setIcon(qtg.QIcon("download.png"))
+        self.tray_icon.setIcon(qtg.QIcon("assets/download.png"))
 
 
     def get_folder_unread_count(self, folder: Folder):
