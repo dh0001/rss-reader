@@ -14,7 +14,7 @@ def open_feed_uri_in_browser(article: Article):
         webbrowser.open(article.uri)
 
 
-def atom_rss_template(uri: str) -> tuple[FeedData, list[ArticleData]]:
+def atom_rss_analyzer(uri: str) -> tuple[FeedData, list[ArticleData]]:
     """Atom RSS data reader for the feed reader.
 
     The uri/author of an article is set to the first link/author tag found.
@@ -65,8 +65,8 @@ def atom_rss_template(uri: str) -> tuple[FeedData, list[ArticleData]]:
     return feed, articles
 
 
-templates = {
-    "rss": atom_rss_template,
+analyzers = {
+    "rss": atom_rss_analyzer,
 }
 
 actions = {

@@ -106,7 +106,7 @@ class UpdateThread(qtc.QThread):
         for the duration of the global_refresh_rate."""
         try:
             logging.debug(f"Fetching {feed.uri}")
-            updated_feed, articles = get_feed(feed.uri, feed.template)
+            updated_feed, articles = get_feed(feed.uri, feed.analyzer)
             self.data_downloaded_event.emit(feed, updated_feed, articles)
         except Exception as exc:
             logging.error(f"Error parsing feed {feed.uri}, {exc}")

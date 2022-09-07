@@ -6,7 +6,7 @@ from pathlib import Path
 
 from typing import Any, Callable, Iterator
 
-from util import check_type
+from util import check_type, check_val
 
 DEFAULT_TIME = datetime.fromtimestamp(0)
 
@@ -15,9 +15,10 @@ class Feed():
 
     def __init__(self, parent_folder: Folder, data: FeedData | None = None):
         """Initialize a feed with all of its required elements."""
+        
         # feed data
         self.title: str = "untitled feed"
-        "Contains a human readable title for the feed. Often the same as the title of the associated website. This value should not be blank. "
+        "Contains a human readable title for the feed. Often the same as the title of the associated website. This value should not be blank."
 
         self.meta: dict[str, Any] = {}
         "Any metadata the feed uses."
@@ -26,16 +27,32 @@ class Feed():
         "Indicates the last time the feed was modified in a significant way."
 
         self.db_id: int = -1
-        self.template: str = "undefined"
+        "The feed id to use in the database."
+
+        self.analyzer: str = "undefined"
+        "The name of the analzyer to use for this feed."
+
         self.uri: str = "undefined"
+        "URI used to fetch the feed."
 
         # user set
-        self.user_title: str | None = None
         self.parent_folder: Folder = parent_folder
+        "Points to the folder that holds this feed."
+
+        self.user_title: str | None = None
+        "Custom title a user sets for a feed."
+
         self.refresh_rate: int | None = None
+        "Custom refresh rate for this feed."
+
         self.ignore_new: bool = False
+        "Sets whether to ignore notifications for any new article in this feed."
+
         self.delete_time: int | None = None
+        "Custom delete policy for this feed."
+
         self.unread_count: int = 0
+        "The number of unread articles."
 
         if data:
             self.update(data)
@@ -48,6 +65,7 @@ class Feed():
 
     def update(self, data: FeedData | dict[str, Any]):
         """Update the feed with new values."""
+
         if type(data) is dict:
             vars(self).update(data)
         else:
@@ -63,7 +81,7 @@ class Feed():
         check_type(datetime, self.updated)
 
         check_type(int, self.db_id)
-        check_type(str, self.template)
+        check_type(str, self.analyzer)
         check_type(str, self.uri)
 
         # user set
@@ -73,6 +91,10 @@ class Feed():
         check_type(bool, self.ignore_new)
         check_type(int | None, self.delete_time)
         check_type(int, self.unread_count)
+
+        check_val(self.db_id, -1)
+        check_val(self.analyzer, "undefined")
+        check_val(self.uri, "undefined")
 
 
 class FeedData(Feed):
@@ -146,10 +168,32 @@ class Folder:
         self.children: list[Feed | Folder] = [] if children is None else children
 
 
+    def update(self, data: FolderData | dict[str, Any]):
+        """Update the feed with new values."""
+        if type(data) is dict:
+            vars(self).update(data)
+        else:
+            vars(self).update(vars(data))
+        self.type_check()
+
+
+    def type_check(self):
+        check_type(str, self.title)
+        check_type(Folder | None, self.parent_folder)
+        check_type(list[Feed | Folder], self.children)
+
+
     def __iter__(self) -> Iterator[Feed]:
         """Iterate over a folder returns feeds in the folder recursively."""
         for child in self.children:
             yield from child
+
+
+class FolderData(Folder):
+    """Class for storing Folder attributes in a dictionary."""
+    def __init__(self):
+        pass
+
 
 analyzer = Callable[[str], tuple[FeedData, list[ArticleData]]]
 action = Callable[[Article], Any]
@@ -163,17 +207,17 @@ for analyzer_file in Path("analyzers").glob("analyzer-*"):
         raise Exception("cannot import analyzer")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    analyzers.update(check_type(dict[str, analyzer], module.templates))
+    analyzers.update(check_type(dict[str, analyzer], module.analyzers))
     actions.update(check_type(dict[str, action], module.actions))
 
 
-def get_feed(uri: str, template: str) -> tuple[FeedData, list[ArticleData]]:
+def get_feed(uri: str, analyzer: str) -> tuple[FeedData, list[ArticleData]]:
     """Retrives and processes data for a feed from the internet."""
-    return analyzers[template](uri)
+    return analyzers[analyzer](uri)
 
 
 def apply_action(feed: Feed, article: Article):
-    actions[feed.template](article)
+    actions[feed.analyzer](article)
 
 
 def verify_feed_url(url: str) -> bool:

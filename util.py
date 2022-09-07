@@ -15,4 +15,5 @@ def check_type(check: Type[T], item: Any) -> T:
 
 
 def check_val(check: Any, val: Any):
-    if check == val: raise ValueError
+    if check == val:
+        raise ValueError

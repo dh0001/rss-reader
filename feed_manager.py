@@ -38,7 +38,7 @@ class FeedManager(qtc.QObject):
                     node["updated"] = datetime.fromtimestamp(0)
                 else:
                     node["updated"] = datetime.fromisoformat(node["updated"])
-                
+
                 feed.update(node)
                 return feed
 
@@ -116,7 +116,7 @@ class FeedManager(qtc.QObject):
 
         feeddata.db_id = settings.feed_counter
         feeddata.uri = location
-        feeddata.template = analyzer
+        feeddata.analyzer = analyzer
         feed = Feed(folder, feeddata)
 
         folder.children.append(feed)
@@ -126,6 +126,20 @@ class FeedManager(qtc.QObject):
 
         settings.feed_counter += 1
         self._save_feeds()
+
+
+    def update_feed(self, feed: Feed, data: FeedData) -> None:
+        """Sets properties for all feeds.
+
+        Will check if value is same as previous value, and will not update if that is the case.
+        Saves feed changes to disk."""
+        old_refresh_rate = feed.refresh_rate
+
+        feed.update(data)
+        if old_refresh_rate != data.refresh_rate:
+            self._update_thread.update_refresh_rate(feed, data.refresh_rate)
+        self._save_feeds()
+        self.feeds_updated_event.emit()
 
 
     def delete_feed(self, feed: Feed) -> None:
@@ -206,20 +220,6 @@ class FeedManager(qtc.QObject):
     def set_default_refresh_rate(self, rate: int) -> None:
         """Sets the default refresh rate for feeds and resets the scheduled default refresh."""
         self._update_thread.update_global_refresh_rate(rate)
-
-
-    def update_feed(self, feed: Feed, data: FeedData) -> None:
-        """Sets properties for all feeds.
-
-        Will check if value is same as previous value, and will not update if that is the case.
-        Saves feed changes to disk."""
-        old_refresh_rate = feed.refresh_rate
-
-        feed.update(data)
-        if old_refresh_rate != data.refresh_rate:
-            self._update_thread.update_refresh_rate(feed, data.refresh_rate)
-        self._save_feeds()
-        self.feeds_updated_event.emit()
 
 
     def _initialize_database(self) -> None:
