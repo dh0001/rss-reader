@@ -1,17 +1,26 @@
 
 *
-!*/
 !.gitignore
-!*.py
-!download.png
-!new.png
-!defaultsettings.json
-!update.sql
-!/ui/*.ui
 !pylintrc
 !pyproject.toml
 !README.md
+
+!.vscode
 !.vscode/settings.json
+
+!*.py
+
+!analyzers
+!analyzers/*
+
+!assets
+!assets/*
+
+!ui
+!ui/*.ui
+
+!data
+!data/defaultsettings.json
 
 
 # Windows image file caches

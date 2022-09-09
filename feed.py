@@ -8,8 +8,6 @@ from typing import Any, Callable, Iterator
 
 from util import check_type, check_val
 
-DEFAULT_TIME = datetime.fromtimestamp(0)
-
 class Feed():
     """Holds information for a feed, and its metadata."""
 
@@ -23,7 +21,7 @@ class Feed():
         self.meta: dict[str, Any] = {}
         "Any metadata the feed uses."
 
-        self.updated: datetime = DEFAULT_TIME   # TODO this value currently unused. Does it even matter when it was last updated?
+        self.updated: datetime = datetime.min   # TODO this value currently unused. Does it even matter when it was last updated?
         "Indicates the last time the feed was modified in a significant way."
 
         self.db_id: int = -1
@@ -95,6 +93,7 @@ class Feed():
         check_val(self.db_id, -1)
         check_val(self.analyzer, "undefined")
         check_val(self.uri, "undefined")
+        check_val(self.updated, datetime.min)
 
 
 class FeedData(Feed):
@@ -146,6 +145,11 @@ class Article():
         check_type(int, self.feed_id)
         check_type(bool, self.unread)
         check_type(bool, self.flag)
+
+        check_val(self.feed_id, -1)
+        check_val(self.identifier, "undefined")
+        check_val(self.updated, datetime.min)
+        check_val(self.identifier, "article id")
 
 
 class ArticleData(Article):

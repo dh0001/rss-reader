@@ -1,3 +1,6 @@
+[build-system]
+requires = ["PySide6", "requests", "defusedxml", "python-dateutil"]
+
 [tool.autopep8]
 max_line_length = 99999
 ignore = "E303"  # or ["E501", "W6"]

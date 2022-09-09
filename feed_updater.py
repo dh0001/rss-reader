@@ -1,9 +1,11 @@
+from __future__ import annotations
 from heapq import heapify, heappop, heappush
 import time
 import threading
 import queue
 import logging
 from typing import NamedTuple, Union
+
 
 from PySide6 import QtCore as qtc
 
@@ -13,7 +15,10 @@ from settings import Settings
 
 class Entry(NamedTuple):
     time: float
-    scheduled: Feed | None  # a value of None indicates global refresh    
+    scheduled: Feed | None  # a value of None indicates global refresh
+
+    def __lt__(self, other: Entry):
+        return self.time <= other.time
 
 # Entry = NamedTuple('Entry', ['scheduled', 'time'])
 
@@ -60,7 +65,6 @@ class UpdateThread(qtc.QThread):
                 return
 
             with self.schedule_lock:
-
                 
                 if self.schedule[0].time <= time.time():
 

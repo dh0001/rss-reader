@@ -4,12 +4,11 @@ Open source feed reading application.
 
 ## Required Packages
 
-* PySide2
+* PySide6
 * requests
 * defusedxml
-* sortedcontainers
 * python-dateutil
 
 ## Usage
 
-Run `rss_reader.py` using python 3. Reset by deleting `articles.db`, `settings.json`, and `feeds.json`.
+Run `rss_reader.py` using python 3. Reset by deleting `data/articles.db`, `data/settings.json`, and `data/feeds.json`.

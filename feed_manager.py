@@ -33,7 +33,7 @@ class FeedManager(qtc.QObject):
             # its a feed
             else:
                 feed = Feed(parent)
-                
+
                 if node["updated"] == None:
                     node["updated"] = datetime.fromtimestamp(0)
                 else:
@@ -42,11 +42,11 @@ class FeedManager(qtc.QObject):
                 feed.update(node)
                 return feed
 
-        if not os.path.exists("feeds.json"):
-            with open("feeds.json", "w") as _new_file:
+        if not os.path.exists("data/feeds.json"):
+            with open("data/feeds.json", "w") as _new_file:
                 _new_file.write("[]")
 
-        with open("feeds.json", "rb") as _feeds_file:
+        with open("data/feeds.json", "rb") as _feeds_file:
             contents = _feeds_file.read().decode("utf-8")
         
         self.feed_cache = Folder("root")
@@ -254,7 +254,7 @@ class FeedManager(qtc.QObject):
                 return data
 
         content = json.dumps(self.feed_cache.children, default=default, indent=4)
-        with open("feeds.json", "w") as feeds_file:
+        with open("data/feeds.json", "w") as feeds_file:
             feeds_file.write(content)
 
 
@@ -306,10 +306,7 @@ class FeedManager(qtc.QObject):
         If the article already exists in the database, will update it instead of adding.
         Will also update the unread count on the feed."""
 
-        if feed.delete_time is not None:
-            delete_time = feed.delete_time
-        else:
-            delete_time = settings.default_delete_time
+        delete_time = feed.delete_time if feed.delete_time is not None else settings.default_delete_time
 
         if delete_time == 0:
             date_cutoff = None
@@ -319,13 +316,12 @@ class FeedManager(qtc.QObject):
             with self._sqlite_connection:
                 self._sqlite_connection.execute('''DELETE from articles WHERE updated < ? and feed_id = ?''', [date_cutoff.timestamp(), feed.db_id])
 
-
         known_ids = self._get_article_identifiers(feed.db_id)
 
         new_articles = []
         updated_articles = []
         for articledata in articles:
-
+            articledata.feed_id = feed.db_id
             article = Article(articledata)
 
             if date_cutoff is not None and article.updated < date_cutoff:

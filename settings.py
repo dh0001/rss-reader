@@ -6,9 +6,9 @@ from shutil import copyfile, move
 from typing import Any
 
 
-_settings_file = "settings.json"
-_writing_settings_file = "temp_settings"
-_default_settings_file = "defaultsettings.json"
+_settings_file = "data/settings.json"
+_writing_settings_file = "data/temp_settings"
+_default_settings_file = "data/defaultsettings.json"
 
 
 class Settings():

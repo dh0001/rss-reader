@@ -8,7 +8,7 @@ import view
 # initialization
 app = QApplication([])
 
-logging.basicConfig(filename="log.txt", filemode="a", format="%(asctime)s %(levelname)s:%(message)s")
+logging.basicConfig(filename="data/log.txt", filemode="a", format="%(asctime)s %(levelname)s:%(message)s")
 feed_manager = feed_manager.FeedManager()
 view = view.View(feed_manager)
 
